@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 const zh = {
   app: '畢業門檻',
@@ -133,6 +133,12 @@ const zh = {
   importErrors: '下載錯誤報告',
   importHint: '伺服器先解析並預覽。錯誤列與檔案內重複列不會寫入，確認後才以單一交易寫入有效列。',
   line: '列',
+  skipToContent: '跳至主要內容',
+  nav: '主要選單',
+  nameZhLabel: '中文姓名',
+  nameEnLabel: '英文姓名',
+  emailLabel: '信箱',
+  roleLabel: '角色',
 }
 
 const en: typeof zh = {
@@ -268,6 +274,12 @@ const en: typeof zh = {
   importErrors: 'Download error report',
   importHint: 'The server parses the file and shows a preview. Error rows and in-file duplicates are not written. Valid rows are saved in one transaction after you confirm.',
   line: 'Line',
+  skipToContent: 'Skip to main content',
+  nav: 'Main menu',
+  nameZhLabel: 'Chinese name',
+  nameEnLabel: 'English name',
+  emailLabel: 'Email',
+  roleLabel: 'Role',
 }
 
 type Key = keyof typeof zh
@@ -280,6 +292,9 @@ const I18nContext = createContext<{ locale: 'zh-Hant' | 'en'; t: (key: Key) => s
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState<'zh-Hant' | 'en'>('zh-Hant')
+  useEffect(() => {
+    document.documentElement.lang = locale === 'en' ? 'en' : 'zh-Hant-TW'
+  }, [locale])
   const value = useMemo(
     () => ({
       locale,

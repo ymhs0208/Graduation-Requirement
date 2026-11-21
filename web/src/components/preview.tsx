@@ -69,34 +69,34 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
   }, [pdf, page, zoom])
 
   return (
-    <div className="card flex min-h-[420px] flex-col overflow-hidden bg-[#f7faf8]">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-white px-3 py-2.5 text-sm">
-        <span className="mr-1 font-semibold text-ink">{t('preview')}</span>
-        <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setZoom((value) => Math.max(0.6, value - 0.2))}>
+    <section className="card flex min-h-64 flex-col overflow-hidden bg-[#f7faf8]" aria-label={t('preview')}>
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-white px-3 py-2.5 text-sm" role="toolbar" aria-label={t('preview')}>
+        <span className="mr-1 font-semibold text-ink" id="preview-label">{t('preview')}</span>
+        <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setZoom((value) => Math.max(0.6, value - 0.2))} aria-label={t('zoomOut')}>
           {t('zoomOut')}
         </button>
-        <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setZoom((value) => Math.min(2.4, value + 0.2))}>
+        <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setZoom((value) => Math.min(2.4, value + 0.2))} aria-label={t('zoomIn')}>
           {t('zoomIn')}
         </button>
         {pdf && (
           <>
-            <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPage((value) => Math.max(1, value - 1))}>
+            <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label={t('prevPage')} disabled={page <= 1}>
               {t('prevPage')}
             </button>
-            <span className="tabular-nums text-muted">
+            <span className="tabular-nums text-muted" aria-live="polite">
               {page} / {pages}
             </span>
-            <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPage((value) => Math.min(pages, value + 1))}>
+            <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPage((value) => Math.min(pages, value + 1))} aria-label={t('nextPage')} disabled={page >= pages}>
               {t('nextPage')}
             </button>
           </>
         )}
       </div>
       <div className="flex-1 overflow-auto p-4">
-        {error && <p className="text-sm font-medium text-[#9b1c16]">{t('error')}</p>}
-        {image && <img alt="" src={image} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="rounded-lg bg-white shadow-md" />}
-        <canvas ref={canvasRef} className={pdf ? 'rounded-lg bg-white shadow-md' : 'hidden'} />
+        {error && <p className="text-sm font-medium text-[#9b1c16]" role="alert">{t('error')}</p>}
+        {image && <img alt={t('preview')} src={image} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="rounded-lg bg-white shadow-md" />}
+        <canvas ref={canvasRef} role="img" aria-label={t('preview')} className={pdf ? 'rounded-lg bg-white shadow-md' : 'hidden'} />
       </div>
-    </div>
+    </section>
   )
 }

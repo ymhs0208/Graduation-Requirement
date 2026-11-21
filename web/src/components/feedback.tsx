@@ -32,7 +32,7 @@ export function UploadProgress({ percent, onCancel }: { percent: number; onCance
   const { t } = useI18n()
   const width = Math.max(0, Math.min(100, percent))
   return (
-    <div className="space-y-2 rounded-xl border border-line bg-[#f4faf7] p-3" aria-live="polite">
+    <div className="space-y-2 rounded-xl border border-line bg-[#f4faf7] p-3">
       <div className="flex items-center justify-between text-sm font-medium">
         <span className="inline-flex items-center gap-2">
           <Spinner />
@@ -40,8 +40,8 @@ export function UploadProgress({ percent, onCancel }: { percent: number; onCance
         </span>
         <span>{width}%</span>
       </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-[#e4eee9]">
-        <div className="h-full rounded-full bg-teal transition-[width] duration-150" style={{ width: `${width}%` }} />
+      <div className="h-2.5 overflow-hidden rounded-full bg-[#e4eee9]" role="progressbar" aria-valuenow={width} aria-valuemin={0} aria-valuemax={100} aria-label={t('uploading')}>
+        <div className="h-full rounded-full bg-teal" style={{ width: `${width}%` }} />
       </div>
       <button className="btn btn-ghost" type="button" onClick={onCancel}>
         {t('cancel')}
@@ -66,7 +66,7 @@ export function StepStatus({ steps, current }: { steps: string[]; current: numbe
 export function PageSkeleton() {
   const { t } = useI18n()
   return (
-    <div className="space-y-4" aria-busy="true" aria-label={t('loading')}>
+    <div className="space-y-4" role="status" aria-busy="true" aria-label={t('loading')}>
       <div className="h-8 w-48 animate-pulse rounded-xl bg-[#e4eee9]" />
       <div className="card h-40 animate-pulse bg-[#f7faf8]" />
       <div className="grid gap-3 md:grid-cols-2">
@@ -80,7 +80,7 @@ export function PageSkeleton() {
 export function TableSkeleton() {
   const { t } = useI18n()
   return (
-    <div className="card space-y-3 p-4" aria-busy="true" aria-label={t('loading')}>
+    <div className="card space-y-3 p-4" role="status" aria-busy="true" aria-label={t('loading')}>
       <div className="h-8 animate-pulse rounded-lg bg-[#e7f1ec]" />
       {Array.from({ length: 6 }, (_, index) => (
         <div key={index} className="h-8 animate-pulse rounded-lg bg-[#e4eee9]" />
@@ -90,6 +90,7 @@ export function TableSkeleton() {
 }
 
 export function RouteProgress() {
+  const { t } = useI18n()
   const location = useLocation()
   const [width, setWidth] = useState(0)
   const [visible, setVisible] = useState(false)
@@ -122,7 +123,7 @@ export function RouteProgress() {
     return () => window.clearTimeout(timer)
   }, [location.pathname])
   if (!visible) return null
-  return <div className="route-progress" style={{ width: `${width}%` }} role="progressbar" aria-valuenow={width} aria-valuemin={0} aria-valuemax={100} />
+  return <div className="route-progress" style={{ width: `${width}%` }} role="progressbar" aria-label={t('loading')} aria-valuenow={width} aria-valuemin={0} aria-valuemax={100} />
 }
 
 export function ConnectionBanner() {

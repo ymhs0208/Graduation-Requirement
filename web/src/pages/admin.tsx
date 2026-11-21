@@ -106,12 +106,13 @@ export function AdminStats() {
       )}
       <div className="card overflow-auto">
         <table className="data-table">
+          <caption className="sr-only">{t('stats')}</caption>
           <thead>
             <tr>
-              <th>{t('account')}</th>
-              <th>{locale === 'en' ? 'Name' : '姓名'}</th>
-              <th>{t('overview')}</th>
-              <th>{t('englishRate')}</th>
+              <th scope="col">{t('account')}</th>
+              <th scope="col">{locale === 'en' ? 'Name' : '姓名'}</th>
+              <th scope="col">{t('overview')}</th>
+              <th scope="col">{t('englishRate')}</th>
             </tr>
           </thead>
           <tbody>
@@ -187,7 +188,10 @@ export function AdminReviews() {
             </button>
           ))}
         </div>
-        <textarea className="field w-full" value={comment} onChange={(event) => setComment(event.target.value)} placeholder={t('comment')} />
+        <label className="block text-sm font-medium">
+          {t('comment')}
+          <textarea className="field w-full" value={comment} onChange={(event) => setComment(event.target.value)} />
+        </label>
         <div className="flex flex-wrap gap-2">
           <button
             className="btn btn-pass"
@@ -280,14 +284,14 @@ export function AdminUsers() {
         }}
       >
         {(['account', 'nameZh', 'nameEn', 'email'] as const).map((key) => (
-          <input key={key} className="field w-full" placeholder={key} value={form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} required />
+          <input key={key} className="field w-full" aria-label={key === 'account' ? t('account') : key === 'email' ? t('emailLabel') : key === 'nameEn' ? t('nameEnLabel') : t('nameZhLabel')} placeholder={key === 'account' ? t('account') : key === 'email' ? t('emailLabel') : key === 'nameEn' ? t('nameEnLabel') : t('nameZhLabel')} value={form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} required />
         ))}
-        <select className="field w-full" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+        <select className="field w-full" aria-label={t('roleLabel')} value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
           <option>STUDENT</option>
           <option>TEACHER</option>
           <option>ADMIN</option>
         </select>
-        <input className="field w-full" type="number" value={form.cohortYear} onChange={(event) => setForm({ ...form, cohortYear: Number(event.target.value) })} />
+        <input className="field w-full" type="number" aria-label={t('cohort')} value={form.cohortYear} onChange={(event) => setForm({ ...form, cohortYear: Number(event.target.value) })} />
         <button className="btn btn-ink" type="submit" disabled={busy || formIssues.length > 0} title={formIssues[0] || undefined}>
           <PendingLabel pending={busy}>{t('save')}</PendingLabel>
         </button>
@@ -297,13 +301,14 @@ export function AdminUsers() {
       {temp && <p className="rounded-xl bg-[#fff4dc] px-3 py-2 text-sm font-medium text-[#7a4e00]">暫時密碼（只顯示一次）：{temp}</p>}
       <div className="card overflow-auto">
         <table className="data-table">
+          <caption className="sr-only">{t('users')}</caption>
           <thead>
             <tr>
-              <th>{t('account')}</th>
-              <th>{locale === 'en' ? 'Name' : '姓名'}</th>
-              <th>{locale === 'en' ? 'Role' : '角色'}</th>
-              <th>{locale === 'en' ? 'Status' : '狀態'}</th>
-              <th />
+              <th scope="col">{t('account')}</th>
+              <th scope="col">{locale === 'en' ? 'Name' : '姓名'}</th>
+              <th scope="col">{locale === 'en' ? 'Role' : '角色'}</th>
+              <th scope="col">{locale === 'en' ? 'Status' : '狀態'}</th>
+              <th scope="col">{locale === 'en' ? 'Action' : '操作'}</th>
             </tr>
           </thead>
           <tbody>
@@ -442,13 +447,13 @@ export function AdminRecognized() {
           await client.invalidateQueries({ queryKey: ['recognized'] })
         }}
       >
-        <select className="field w-full" value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>
+        <select className="field w-full" aria-label={t('roleLabel')} value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>
           <option>ENGLISH</option>
           <option>CERTIFICATION</option>
           <option>COMPETITION</option>
         </select>
-        <input className="field w-full" placeholder="nameZh" value={form.nameZh} onChange={(event) => setForm({ ...form, nameZh: event.target.value })} required />
-        <input className="field w-full" placeholder="nameEn" value={form.nameEn} onChange={(event) => setForm({ ...form, nameEn: event.target.value })} required />
+        <input className="field w-full" aria-label={t('nameZhLabel')} placeholder={t('nameZhLabel')} value={form.nameZh} onChange={(event) => setForm({ ...form, nameZh: event.target.value })} required />
+        <input className="field w-full" aria-label={t('nameEnLabel')} placeholder={t('nameEnLabel')} value={form.nameEn} onChange={(event) => setForm({ ...form, nameEn: event.target.value })} required />
         <button className="btn btn-ink" type="submit" disabled={!form.nameZh.trim() || !form.nameEn.trim()} title={!form.nameZh.trim() || !form.nameEn.trim() ? t('needName') : undefined}>{t('save')}</button>
       </form>
       <ul className="space-y-2">

@@ -57,7 +57,7 @@ export function ImportPanel() {
       </div>
       <div className="flex flex-wrap gap-2">
         {(['accounts', 'credits'] as const).map((item) => (
-          <button key={item} className={`btn ${kind === item ? 'btn-ink' : 'btn-ghost'}`} type="button" onClick={() => { setKind(item); setPreview(null); setPasswords([]) }}>
+          <button key={item} className={`btn ${kind === item ? 'btn-ink' : 'btn-ghost'}`} type="button" aria-pressed={kind === item} onClick={() => { setKind(item); setPreview(null); setPasswords([]) }}>
             {item === 'accounts' ? t('importKindAccounts') : t('importKindCredits')}
           </button>
         ))}
@@ -122,12 +122,13 @@ export function ImportPanel() {
           </div>
           <div className="overflow-auto rounded-xl border border-line">
             <table className="data-table">
+              <caption className="sr-only">{t('importTitle')}</caption>
               <thead>
                 <tr>
-                  <th>{t('line')}</th>
-                  <th>{locale === 'en' ? 'Status' : '狀態'}</th>
-                  <th>{locale === 'en' ? 'Details' : '說明'}</th>
-                  <th>{t('account')}</th>
+                  <th scope="col">{t('line')}</th>
+                  <th scope="col">{locale === 'en' ? 'Status' : '狀態'}</th>
+                  <th scope="col">{locale === 'en' ? 'Details' : '說明'}</th>
+                  <th scope="col">{t('account')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -142,7 +143,8 @@ export function ImportPanel() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap gap-4 text-sm">
+          <fieldset className="flex flex-wrap gap-4 text-sm">
+            <legend className="sr-only">{t('importConflict')}</legend>
             <label className="inline-flex items-center gap-2">
               <input type="radio" name="conflict" checked={conflict === 'skip'} onChange={() => setConflict('skip')} />
               {t('importSkip')}
@@ -151,7 +153,7 @@ export function ImportPanel() {
               <input type="radio" name="conflict" checked={conflict === 'update'} onChange={() => setConflict('update')} />
               {t('importUpdate')}
             </label>
-          </div>
+          </fieldset>
           <div className="flex flex-wrap gap-2">
             <button
               className="btn btn-primary"

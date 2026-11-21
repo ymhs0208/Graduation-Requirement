@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { PendingLabel } from './feedback'
+import { Check, Clock, Info, Minus } from 'lucide-react'
 
 export type SessionUser = {
   id: string
@@ -42,6 +43,11 @@ const links = {
   ],
 } as const
 
+export function SkipLink() {
+  const { t } = useI18n()
+  return <a className="skip-link" href="#main">{t('skipToContent')}</a>
+}
+
 export function Shell({ user, onLocale, children }: { user: SessionUser; onLocale: (locale: 'zh-Hant' | 'en') => void; children: ReactNode }) {
   const { t, locale } = useI18n()
   const navigate = useNavigate()
@@ -49,16 +55,17 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
   const name = locale === 'en' ? user.nameEn : user.nameZh
   return (
     <div className="min-h-screen md:grid md:grid-cols-[272px_1fr]">
-      <aside className="bg-pine text-white md:min-h-screen">
+      <SkipLink />
+      <aside className="bg-pine text-white md:min-h-screen" aria-label={t('nav')}>
         <div className="h-1 bg-gold" />
         <div className="flex items-center gap-3 px-4 py-4 md:px-5 md:py-5">
-          <img src="/brand/program-mark.png" alt="" className="h-11 w-11 shrink-0 rounded-xl bg-white object-contain p-1 shadow-sm" />
+          <img src="/brand/program-mark.png" alt={t('program')} className="h-11 w-11 shrink-0 rounded-xl bg-white object-contain p-1 shadow-sm" />
           <div className="min-w-0">
             <p className="text-sm font-semibold tracking-wide">{t('app')}</p>
-            <p className="text-[11px] leading-snug text-emerald-50/75">{t('program')}</p>
+            <p className="text-xs leading-snug text-white/90">{t('program')}</p>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:block md:space-y-1 md:overflow-visible md:px-3 md:pb-6">
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:block md:space-y-1 md:overflow-visible md:px-3 md:pb-6" aria-label={t('nav')}>
           {links[user.role].map(([to, key]) => (
             <NavLink
               key={to}
@@ -89,7 +96,7 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
                 setPending('locale')
                 try {
                   await onLocale(next)
-                  document.documentElement.lang = next === 'en' ? 'en' : 'zh-Hant'
+                  document.documentElement.lang = next === 'en' ? 'en' : 'zh-Hant-TW'
                 } finally {
                   setPending('')
                 }
@@ -115,7 +122,7 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
             </button>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+        <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-6 outline-none sm:px-6 sm:py-8">{children}</main>
       </div>
     </div>
   )
@@ -133,12 +140,25 @@ const pillTone: Record<string, [string, 'passed' | 'underReview' | 'missing' | '
   needs_office: ['bg-[#e7f3fa] text-[#0f5f8a] ring-[#c5dff0]', 'office'],
 }
 
+const pillIcon = {
+  passed: Check,
+  underReview: Clock,
+  missing: Minus,
+  unpublished: Info,
+  info: Info,
+  canGraduate: Check,
+  blocked: Minus,
+  pending: Clock,
+  office: Info,
+} as const
+
 export function StatusPill({ state }: { state: string }) {
   const { t } = useI18n()
   const [color, key] = pillTone[state] ?? ['bg-[#f3f5f4] text-[#3f514c] ring-[#d5deda]', 'info']
+  const Icon = pillIcon[key]
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${color}`}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+      <Icon className="h-3.5 w-3.5" aria-hidden />
       {t(key)}
     </span>
   )
@@ -151,8 +171,8 @@ export function Ring({ value, label }: { value: number; label: string }) {
   const offset = length * (1 - clamped)
   const gradientId = useId().replace(/:/g, '')
   return (
-    <div className="relative grid h-[8.5rem] w-[8.5rem] shrink-0 place-items-center">
-      <svg viewBox="0 0 100 100" className="h-[8.5rem] w-[8.5rem] -rotate-90">
+    <div className="relative grid h-[8.5rem] w-[8.5rem] shrink-0 place-items-center" role="img" aria-label={`${label}, ${Math.round(clamped * 100)}%`}>
+      <svg viewBox="0 0 100 100" className="h-[8.5rem] w-[8.5rem] -rotate-90" aria-hidden>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#1aa37a" />
@@ -172,7 +192,7 @@ export function Ring({ value, label }: { value: number; label: string }) {
           strokeLinecap="round"
         />
       </svg>
-      <div className="absolute px-3 text-center">
+      <div className="absolute px-3 text-center" aria-hidden>
         <p className="text-sm font-bold leading-tight text-ink">{label}</p>
         <p className="text-[11px] font-medium text-muted">{Math.round(clamped * 100)}%</p>
       </div>

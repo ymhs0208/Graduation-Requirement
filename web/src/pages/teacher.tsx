@@ -38,12 +38,13 @@ export function TeacherHome() {
       </label>
       <div className="card overflow-auto">
         <table className="data-table">
+          <caption className="sr-only">{t('classes')}</caption>
           <thead>
             <tr>
-              <th>{t('account')}</th>
-              <th>{locale === 'en' ? 'Name' : '姓名'}</th>
-              <th>{t('overview')}</th>
-              <th>{t('earned')}</th>
+              <th scope="col">{t('account')}</th>
+              <th scope="col">{locale === 'en' ? 'Name' : '姓名'}</th>
+              <th scope="col">{t('overview')}</th>
+              <th scope="col">{t('earned')}</th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +134,10 @@ export function TeacherStudent() {
             })
           }}
         >
-          <textarea className="field w-full" value={body} onChange={(event) => setBody(event.target.value)} placeholder={t('reminder')} />
+          <label className="block text-sm font-medium">
+            {t('reminder')}
+            <textarea className="field w-full" value={body} onChange={(event) => setBody(event.target.value)} />
+          </label>
           <button className="btn btn-ink" type="submit" disabled={busy || !body.trim()} title={!body.trim() ? t('reminderHint') : undefined}>
             <PendingLabel pending={busy}>{t('reminder')}</PendingLabel>
           </button>

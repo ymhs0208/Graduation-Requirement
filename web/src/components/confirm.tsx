@@ -8,20 +8,64 @@ const ConfirmContext = createContext<(options: Omit<Ask, 'resolve'>) => Promise<
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n()
   const [ask, setAsk] = useState<Ask | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const returnFocus = useRef<HTMLElement | null>(null)
   const confirm = (options: Omit<Ask, 'resolve'>) => new Promise<boolean>((resolve) => setAsk({ ...options, resolve }))
+  const close = (accepted: boolean) => {
+    ask?.resolve(accepted)
+    setAsk(null)
+  }
+  useEffect(() => {
+    if (!ask) return
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const panel = panelRef.current
+    const focusable = () => [...(panel?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? [])]
+    focusable()[0]?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        close(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const items = focusable()
+      if (!items.length) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      returnFocus.current?.focus()
+    }
+  }, [ask])
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
       {ask && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-pine/40 p-4" role="dialog" aria-modal="true">
-          <div className="card w-full max-w-md space-y-3 p-5">
-            <h2 className="text-lg font-bold">{ask.title}</h2>
-            <p className="text-sm leading-6">{ask.body}</p>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-pine/40 p-4" role="presentation">
+          <div
+            ref={panelRef}
+            className="card w-full max-w-md space-y-3 p-5"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            aria-describedby="confirm-body"
+          >
+            <h2 id="confirm-title" className="text-lg font-bold">{ask.title}</h2>
+            <p id="confirm-body" className="text-sm leading-6">{ask.body}</p>
             <div className="flex justify-end gap-2">
-              <button className="btn btn-ghost" type="button" onClick={() => { ask.resolve(false); setAsk(null) }}>
+              <button className="btn btn-ghost" type="button" onClick={() => close(false)}>
                 {t('cancel')}
               </button>
-              <button className={`btn ${ask.danger ? 'btn-miss' : 'btn-primary'}`} type="button" onClick={() => { ask.resolve(true); setAsk(null) }}>
+              <button className={`btn ${ask.danger ? 'btn-miss' : 'btn-primary'}`} type="button" onClick={() => close(true)}>
                 {ask.confirm}
               </button>
             </div>

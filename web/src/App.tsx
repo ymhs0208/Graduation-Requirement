@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ConfirmProvider } from './components/confirm'
 import { ConnectionBanner, PageSkeleton, PendingButton, RouteProgress } from './components/feedback'
 import { Toaster } from 'sonner'
-import { Shell, type SessionUser } from './components/shell'
+import { Shell, SkipLink, type SessionUser } from './components/shell'
 import { errorMessage, api } from './lib/api'
 import { I18nProvider, useI18n } from './lib/i18n'
 import { AdminAudit, AdminRecognized, AdminRetention, AdminReviews, AdminRules, AdminStats, AdminUsers } from './pages/admin'
@@ -32,10 +32,12 @@ function LoginPage() {
   })
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { account: '', password: '', totp: '' } })
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
+    <>
+    <SkipLink />
+    <main id="main" tabIndex={-1} className="grid min-h-screen outline-none lg:grid-cols-[1.05fr_0.95fr]">
       <div className="relative hidden overflow-hidden bg-pine text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="absolute inset-x-0 top-0 h-1 bg-gold" />
-        <img src="/brand/program-wordmark.png" alt="" className="h-16 w-fit rounded-xl bg-white object-contain p-2 shadow-md" />
+        <img src="/brand/program-wordmark.png" alt={t('program')} className="h-16 w-fit rounded-xl bg-white object-contain p-2 shadow-md" />
         <div>
           <p className="text-xs font-semibold tracking-[0.18em] text-emerald-100/75">NATIONAL TAICHUNG UNIVERSITY OF SCIENCE AND TECHNOLOGY</p>
           <p className="mt-4 text-4xl font-bold tracking-tight">國立臺中科技大學</p>
@@ -65,7 +67,7 @@ function LoginPage() {
             }
           })}
         >
-          <img src="/brand/program-mark.png" alt="" className="h-14 w-14 rounded-xl bg-white object-contain p-1 ring-1 ring-line lg:hidden" />
+          <img src="/brand/program-mark.png" alt={t('program')} className="h-14 w-14 rounded-xl bg-white object-contain p-1 ring-1 ring-line lg:hidden" />
           <div>
             <p className="text-xs font-semibold tracking-wide text-teal lg:hidden">國立臺中科技大學</p>
             <h1 className="text-2xl font-bold tracking-tight text-ink">{t('login')}</h1>
@@ -97,7 +99,8 @@ function LoginPage() {
           </button>
         </form>
       </div>
-    </div>
+    </main>
+    </>
   )
 }
 
@@ -108,7 +111,9 @@ function PasswordPage() {
   const schema = z.object({ currentPassword: z.string().min(1), nextPassword: z.string().min(12) })
   const form = useForm({ resolver: zodResolver(schema) })
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-16">
+    <>
+    <SkipLink />
+    <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-paper px-4 py-16 outline-none">
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
         onSubmit={form.handleSubmit(async (values) => {
@@ -124,17 +129,18 @@ function PasswordPage() {
           }
         })}
       >
-        <img src="/brand/program-mark.png" alt="" className="h-12 w-12 rounded-xl object-contain" />
+        <img src="/brand/program-mark.png" alt={t('program')} className="h-12 w-12 rounded-xl object-contain" />
         <h1 className="text-2xl font-bold tracking-tight">{t('changePassword')}</h1>
         <p className="text-sm text-muted">{t('passwordRule')}</p>
-        <input className="field w-full" type="password" placeholder={t('currentPassword')} {...form.register('currentPassword')} />
-        <input className="field w-full" type="password" placeholder={t('nextPassword')} {...form.register('nextPassword')} />
+        <input className="field w-full" type="password" aria-label={t('currentPassword')} placeholder={t('currentPassword')} {...form.register('currentPassword')} />
+        <input className="field w-full" type="password" aria-label={t('nextPassword')} placeholder={t('nextPassword')} {...form.register('nextPassword')} />
         {message && <p className="text-sm font-medium text-[#9b1c16]">{message}</p>}
         <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
         </PendingButton>
       </form>
-    </div>
+    </main>
+    </>
   )
 }
 
@@ -146,7 +152,9 @@ function ResetPage() {
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState(false)
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-16">
+    <>
+    <SkipLink />
+    <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-paper px-4 py-16 outline-none">
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
         onSubmit={async (event) => {
@@ -163,15 +171,16 @@ function ResetPage() {
           }
         }}
       >
-        <img src="/brand/program-mark.png" alt="" className="h-12 w-12 rounded-xl object-contain" />
+        <img src="/brand/program-mark.png" alt={t('program')} className="h-12 w-12 rounded-xl object-contain" />
         <h1 className="text-2xl font-bold tracking-tight">{t('changePassword')}</h1>
-        <input className="field w-full" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+        <input className="field w-full" type="password" aria-label={t('nextPassword')} value={password} onChange={(event) => setPassword(event.target.value)} />
         {message && <p className="rounded-xl bg-[#fdeceb] px-3 py-2 text-sm font-medium text-[#9b1c16]">{message}</p>}
         <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
         </PendingButton>
       </form>
-    </div>
+    </main>
+    </>
   )
 }
 
@@ -184,7 +193,9 @@ function TotpPage() {
     api<{ secret: string }>('/api/auth/totp/setup', { method: 'POST', body: {} }).then((data) => setSecret(data.secret))
   }, [])
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-16">
+    <>
+    <SkipLink />
+    <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-paper px-4 py-16 outline-none">
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
       onSubmit={async (event) => {
@@ -198,15 +209,16 @@ function TotpPage() {
         }
       }}
       >
-        <img src="/brand/program-mark.png" alt="" className="h-12 w-12 rounded-xl object-contain" />
+        <img src="/brand/program-mark.png" alt={t('program')} className="h-12 w-12 rounded-xl object-contain" />
         <h1 className="text-2xl font-bold tracking-tight">{t('setupTotp')}</h1>
         <p className="break-all rounded-xl bg-[#eef5f1] p-3 font-mono text-sm text-ink">{secret}</p>
-        <input className="field w-full" value={token} onChange={(event) => setToken(event.target.value)} />
+        <input className="field w-full" aria-label={t('totp')} value={token} onChange={(event) => setToken(event.target.value)} />
         <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
         </PendingButton>
       </form>
-    </div>
+    </main>
+    </>
   )
 }
 
@@ -217,7 +229,7 @@ function Gate() {
   useEffect(() => {
     if (user?.locale === 'en' || user?.locale === 'zh-Hant') setLocale(user.locale)
   }, [user?.locale, setLocale])
-  if (query.isLoading) return <div className="p-8"><PageSkeleton /></div>
+  if (query.isLoading) return <main id="main" className="p-8"><PageSkeleton /></main>
   if (query.isError || !query.data || !user) return <LoginPage />
   if (user.mustChangePassword) return <PasswordPage />
   if (user.role === 'ADMIN' && !user.totpEnabled) return <TotpPage />
@@ -259,7 +271,7 @@ export default function App() {
         <BrowserRouter>
           <RouteProgress />
           <ConnectionBanner />
-          <Toaster position="top-center" richColors closeButton />
+          <Toaster position="top-center" richColors closeButton containerAriaLabel="Notifications" />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/reset" element={<ResetPage />} />
