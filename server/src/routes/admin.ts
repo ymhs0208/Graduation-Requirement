@@ -1,21 +1,71 @@
 import { Router } from 'express'
-import { parse } from 'csv-parse/sync'
+import multer from 'multer'
 import { stringify } from 'csv-stringify/sync'
 import { z } from 'zod'
 import { prisma } from '../db'
 import { audit } from '../audit'
-import { hashPassword } from '../crypto'
 import { HttpError } from '../errors'
 import { asyncHandler, pid, requireRole, requireUser, type AuthedRequest } from '../http'
 import { anonymizeUser, purgeRetention, retentionCandidates, runPreaudit, runReminders } from '../jobs'
 import { progressFor } from '../progress'
-import { issueActivation, schoolEmail } from './auth'
+import { issueActivation } from './auth'
 import { presentSubmission, tellStudentReviewed } from './student'
+import { accountFormatIssue, emailIssue, inspectCredits } from '../csv-import'
+import { buildPreview, commitPreview, errorsBody, loadCreditContext, previewBody, readPreview, templateBody } from '../import-commit'
+
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500_000, files: 1 } })
 
 const router = Router()
 router.use(requireUser, requireRole('ADMIN'))
 
-const accountSchema = z.string().trim().regex(/^[A-Za-z0-9]{4,20}$/)
+const accountSchema = z.string().trim().min(1).max(20)
+
+router.get('/import/template', (req, res) => {
+  const kind = req.query.kind === 'credits' ? 'credits' : 'accounts'
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="${kind}-template.csv"`)
+  res.send(templateBody(kind))
+})
+
+router.post(
+  '/import/preview',
+  csvUpload.single('file'),
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const kindRaw = String(req.body?.kind ?? req.query.kind ?? '')
+    if (kindRaw !== 'accounts' && kindRaw !== 'credits') throw new HttpError(400, 'VALIDATION')
+    const buf = req.file?.buffer ?? (typeof req.body?.csv === 'string' ? Buffer.from(req.body.csv, 'utf8') : null)
+    if (!buf?.length) throw new HttpError(400, 'CSV_EMPTY')
+    const built = await buildPreview(req.userId!, kindRaw, buf)
+    res.json(previewBody(built))
+  }),
+)
+
+router.get(
+  '/import/:id/errors',
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const preview = readPreview(pid(req.params.id), req.userId!)
+    if (!preview) throw new HttpError(404, 'PREVIEW_EXPIRED')
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename="import-errors.csv"')
+    res.send(errorsBody(preview))
+  }),
+)
+
+router.post(
+  '/import/commit',
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const body = z
+      .object({
+        previewId: z.string().min(8),
+        conflict: z.enum(['skip', 'update']),
+        confirm: z.literal(true),
+      })
+      .parse(req.body)
+    const result = await commitPreview(req.userId!, body.previewId, body.conflict)
+    if (!result) throw new HttpError(404, 'PREVIEW_EXPIRED')
+    res.json(result)
+  }),
+)
 
 router.get(
   '/stats',
@@ -151,13 +201,24 @@ router.post(
         account: accountSchema,
         nameZh: z.string().trim().min(1).max(40),
         nameEn: z.string().trim().min(1).max(80),
-        email: schoolEmail,
+        email: z.string().trim().min(1).max(120),
         role: z.enum(['STUDENT', 'TEACHER', 'ADMIN']),
         cohortYear: z.number().int().min(100).max(200).optional(),
         classId: z.string().optional(),
       })
       .parse(req.body)
-    if (body.role === 'STUDENT' && !body.cohortYear) throw new HttpError(400, 'VALIDATION')
+    const accountCode = accountFormatIssue(body.role, body.account)
+    if (accountCode) throw new HttpError(400, 'BAD_ACCOUNT')
+    if (emailIssue(body.email)) throw new HttpError(400, 'BAD_EMAIL')
+    if (body.role === 'STUDENT') {
+      if (!body.cohortYear) throw new HttpError(400, 'BAD_COHORT')
+      const rule = await prisma.ruleSet.findUnique({ where: { cohortYear: body.cohortYear } })
+      if (!rule) throw new HttpError(400, 'BAD_COHORT')
+    }
+    if (body.classId) {
+      const found = await prisma.class.findUnique({ where: { id: body.classId } })
+      if (!found || (body.cohortYear != null && found.cohortYear !== body.cohortYear)) throw new HttpError(400, 'BAD_CLASS')
+    }
     const created = await prisma.user.create({
       data: {
         account: body.account,
@@ -236,48 +297,14 @@ router.patch(
 router.post(
   '/users/import',
   asyncHandler(async (req: AuthedRequest, res) => {
-    const body = z.object({ csv: z.string().min(1).max(500_000) }).parse(req.body)
-    const rows = parse(body.csv.replace(/^\uFEFF/, ''), { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[]
-    const created = []
-    for (const row of rows) {
-      const account = accountSchema.parse(row.account)
-      const email = schoolEmail.parse(row.email)
-      const role = z.enum(['STUDENT', 'TEACHER', 'ADMIN']).parse(row.role || 'STUDENT')
-      const cohortYear = row.cohortYear ? Number(row.cohortYear) : undefined
-      let classId: string | null = null
-      if (row.className) {
-        const year = cohortYear ?? new Date().getFullYear() - 1911
-        const found = await prisma.class.upsert({
-          where: { nameZh_cohortYear: { nameZh: row.className, cohortYear: year } },
-          update: {},
-          create: { nameZh: row.className, nameEn: row.classNameEn || row.className, cohortYear: year },
-        })
-        classId = found.id
-      }
-      const user = await prisma.user.create({
-        data: {
-          account,
-          email: email.toLowerCase(),
-          nameZh: z.string().min(1).max(40).parse(row.nameZh),
-          nameEn: (row.nameEn || row.nameZh).slice(0, 80),
-          role,
-          cohortYear: cohortYear ?? null,
-          classId,
-          passwordHash: await hashPassword('Temp#pending1'),
-          mustChangePassword: true,
-        },
-      })
-      const issued = await issueActivation(user.id)
-      created.push({ account, tempPassword: issued?.tempPassword })
-    }
-    await audit({
-      actorId: req.userId,
-      action: 'user.import',
-      entityType: 'user',
-      summaryZh: `匯入 ${created.length} 個帳號`,
-      summaryEn: `Imported ${created.length} accounts`,
-    })
-    res.json({ created })
+    const body = z
+      .object({ csv: z.string().min(1).max(500_000), confirm: z.literal(true).optional(), conflict: z.enum(['skip', 'update']).optional() })
+      .parse(req.body)
+    const built = await buildPreview(req.userId!, 'accounts', Buffer.from(body.csv, 'utf8'))
+    if (body.confirm !== true) return res.json(previewBody(built))
+    const result = await commitPreview(req.userId!, built.id, body.conflict ?? 'skip')
+    if (!result) throw new HttpError(404, 'PREVIEW_EXPIRED')
+    res.json(result)
   }),
 )
 
@@ -500,6 +527,29 @@ router.post(
   '/credits',
   asyncHandler(async (req: AuthedRequest, res) => {
     const body = creditSchema.parse(req.body)
+    const checked = inspectCredits(
+      [
+        {
+          account: body.account,
+          courseNameZh: body.courseNameZh,
+          courseNameEn: body.courseNameEn ?? '',
+          categoryCode: body.categoryCode,
+          credits: String(body.credits),
+          grade: body.grade ?? '',
+          termYear: String(body.termYear),
+          termSemester: String(body.termSemester),
+          domain: body.domain ?? '',
+          passed: body.passed ? 'true' : 'false',
+        },
+      ],
+      await loadCreditContext(),
+    )
+    if (checked[0]?.status === 'error') {
+      throw new HttpError(400, 'VALIDATION', {
+        zh: checked[0].errors.map((item) => item.zh).join('；'),
+        en: checked[0].errors.map((item) => item.en).join('; '),
+      })
+    }
     const student = await prisma.user.findFirst({ where: { account: body.account, role: 'STUDENT' } })
     if (!student) throw new HttpError(404, 'NOT_FOUND')
     const record = await prisma.creditRecord.create({
@@ -531,36 +581,14 @@ router.post(
 router.post(
   '/credits/import',
   asyncHandler(async (req: AuthedRequest, res) => {
-    const body = z.object({ csv: z.string().min(1).max(500_000) }).parse(req.body)
-    const rows = parse(body.csv.replace(/^\uFEFF/, ''), { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[]
-    let count = 0
-    for (const row of rows) {
-      const student = await prisma.user.findFirst({ where: { account: row.account, role: 'STUDENT' } })
-      if (!student) throw new HttpError(400, 'VALIDATION')
-      await prisma.creditRecord.create({
-        data: {
-          studentId: student.id,
-          courseNameZh: row.courseNameZh,
-          courseNameEn: row.courseNameEn || row.courseNameZh,
-          categoryCode: row.categoryCode,
-          credits: Number(row.credits),
-          grade: row.grade || null,
-          termYear: Number(row.termYear),
-          termSemester: Number(row.termSemester),
-          domain: row.domain || null,
-          passed: row.passed !== 'false',
-        },
-      })
-      count += 1
-    }
-    await audit({
-      actorId: req.userId,
-      action: 'credit.import',
-      entityType: 'credit',
-      summaryZh: `匯入 ${count} 筆成績`,
-      summaryEn: `Imported ${count} credit records`,
-    })
-    res.json({ count })
+    const body = z
+      .object({ csv: z.string().min(1).max(500_000), confirm: z.literal(true).optional(), conflict: z.enum(['skip', 'update']).optional() })
+      .parse(req.body)
+    const built = await buildPreview(req.userId!, 'credits', Buffer.from(body.csv, 'utf8'))
+    if (body.confirm !== true) return res.json(previewBody(built))
+    const result = await commitPreview(req.userId!, built.id, body.conflict ?? 'skip')
+    if (!result) throw new HttpError(404, 'PREVIEW_EXPIRED')
+    res.json(result)
   }),
 )
 

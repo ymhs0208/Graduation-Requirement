@@ -6,10 +6,22 @@ export function setCsrf(token: string) {
 
 export class ApiError extends Error {
   code: string
-  constructor(code: string) {
+  messageZh?: string
+  messageEn?: string
+  constructor(code: string, messageZh?: string, messageEn?: string) {
     super(code)
     this.code = code
+    this.messageZh = messageZh
+    this.messageEn = messageEn
   }
+}
+
+export function errorMessage(error: unknown, locale: 'zh-Hant' | 'en', fallback: string) {
+  if (error instanceof ApiError) {
+    const text = locale === 'en' ? error.messageEn : error.messageZh
+    if (text) return text
+  }
+  return fallback
 }
 
 export async function api<T>(path: string, options: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
@@ -29,7 +41,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
   })
   const text = await response.text()
   const data = text ? JSON.parse(text) : {}
-  if (!response.ok) throw new ApiError(data.error ?? 'SERVER')
+  if (!response.ok) throw new ApiError(data.error ?? 'SERVER', data.messageZh, data.messageEn)
   if (data.csrfToken) setCsrf(data.csrfToken)
   return data as T
 }

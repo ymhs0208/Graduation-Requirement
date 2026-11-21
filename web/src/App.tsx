@@ -5,8 +5,9 @@ import { BrowserRouter } from 'react-router-dom'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { ConfirmProvider } from './components/confirm'
 import { Shell, type SessionUser } from './components/shell'
-import { ApiError, api } from './lib/api'
+import { errorMessage, api } from './lib/api'
 import { I18nProvider, useI18n } from './lib/i18n'
 import { AdminAudit, AdminRecognized, AdminRetention, AdminReviews, AdminRules, AdminStats, AdminUsers } from './pages/admin'
 import { HelpPage } from './pages/help'
@@ -18,7 +19,7 @@ const client = new QueryClient()
 type Me = { user: SessionUser; csrfToken: string }
 
 function LoginPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [message, setMessage] = useState('')
   const [forgot, setForgot] = useState(false)
   const schema = z.object({
@@ -54,7 +55,7 @@ function LoginPage() {
               await api('/api/auth/login', { method: 'POST', body: values })
               window.location.href = '/'
             } catch (error) {
-              setMessage(error instanceof ApiError ? error.code : t('error'))
+              setMessage(errorMessage(error, locale, t('error')))
             }
           })}
         >
@@ -121,7 +122,7 @@ function PasswordPage() {
 }
 
 function ResetPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const navigate = useNavigate()
   const token = new URLSearchParams(window.location.search).get('token') ?? ''
   const [password, setPassword] = useState('')
@@ -136,7 +137,7 @@ function ResetPage() {
             await api('/api/auth/reset', { method: 'POST', body: { token, password } })
             navigate('/login')
           } catch (error) {
-            setMessage(error instanceof ApiError ? error.code : t('error'))
+            setMessage(errorMessage(error, locale, t('error')))
           }
         }}
       >
@@ -226,6 +227,7 @@ export default function App() {
   return (
     <QueryClientProvider client={client}>
       <I18nProvider>
+        <ConfirmProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -233,6 +235,7 @@ export default function App() {
             <Route path="*" element={<Gate />} />
           </Routes>
         </BrowserRouter>
+        </ConfirmProvider>
       </I18nProvider>
     </QueryClientProvider>
   )

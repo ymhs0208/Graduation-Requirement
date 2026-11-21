@@ -4,6 +4,7 @@ import { prisma } from './db'
 import { HttpError } from './errors'
 import { sha256, safeEqual } from './crypto'
 import { isTest } from './env'
+import { messages } from './messages'
 
 const IDLE_MS = 30 * 60 * 1000
 const ABSOLUTE_MS = 12 * 60 * 60 * 1000
@@ -98,9 +99,17 @@ export async function advisedStudent(teacherId: string, studentId: string) {
 }
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
-  if (err instanceof HttpError) return res.status(err.status).json({ error: err.code })
+  if (err instanceof HttpError) {
+    const text = messages[err.code]
+    return res.status(err.status).json({ error: err.code, messageZh: err.messageZh ?? text?.zh, messageEn: err.messageEn ?? text?.en })
+  }
   if (err instanceof ZodError) {
-    return res.status(400).json({ error: 'VALIDATION', issues: err.issues.map((issue) => issue.message) })
+    return res.status(400).json({
+      error: 'VALIDATION',
+      messageZh: messages.VALIDATION.zh,
+      messageEn: messages.VALIDATION.en,
+      issues: err.issues.map((issue) => issue.message),
+    })
   }
   const multerCode = typeof err === 'object' && err && 'code' in err ? String((err as { code: string }).code) : ''
   if (multerCode === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'FILE_SIZE' })

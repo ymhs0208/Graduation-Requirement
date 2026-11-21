@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api } from '../lib/api'
+import { useLock, useUnsaved } from '../components/confirm'
+import { api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState, Ring, StatusPill } from '../components/shell'
@@ -199,6 +200,7 @@ export function PlanPage() {
 
 export function EvidencePage() {
   const { t, locale } = useI18n()
+  const { busy, run } = useLock()
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dashboard>('/api/me/dashboard') })
   const [thresholdId, setThresholdId] = useState('')
@@ -208,7 +210,10 @@ export function EvidencePage() {
   const [file, setFile] = useState<File | null>(null)
   const [message, setMessage] = useState('')
   const [preview, setPreview] = useState('')
+  useUnsaved(Boolean(file || score || note))
   if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  const fileReady = Boolean(file && file.size <= 8 * 1024 * 1024 && (/^(application\/pdf|image\/png|image\/jpeg)$/.test(file.type) || /\.(pdf|png|jpe?g)$/i.test(file.name)))
+  const fileNote = !file ? t('needFile') : file.size > 8 * 1024 * 1024 ? t('uploadTooBig') : fileReady ? t('uploadReady') : t('uploadType')
   const thresholds = query.data.progress.thresholds.filter((item) => item.state !== 'info')
   const selected = thresholds.find((item) => item.id === thresholdId) ?? thresholds[0]
   const items = query.data.recognized.filter((item) => !selected || item.type === selected.code || (selected.code === 'ENGLISH' && item.type === 'ENGLISH'))
@@ -216,9 +221,10 @@ export function EvidencePage() {
     <div className="grid gap-6 lg:grid-cols-2">
       <form
         className="card space-y-4 p-5 sm:p-6"
-        onSubmit={async (event) => {
+        onSubmit={(event) => {
           event.preventDefault()
-          if (!file || !selected) return
+          if (!file || !selected || !fileReady) return
+          void run(async () => {
           const form = new FormData()
           form.set('thresholdId', selected.id)
           if (itemId) form.set('recognizedItemId', itemId)
@@ -231,8 +237,9 @@ export function EvidencePage() {
             setFile(null)
             await client.invalidateQueries({ queryKey: ['dashboard'] })
           } catch (error) {
-            setMessage(error instanceof Error ? error.message : 'error')
+            setMessage(errorMessage(error, locale, t('error')))
           }
+          })
         }}
       >
         <h1 className="text-xl font-bold tracking-tight">{t('upload')}</h1>
@@ -279,9 +286,10 @@ export function EvidencePage() {
           <span className="block font-medium text-ink">{file ? file.name : t('drop')}</span>
           <input className="sr-only" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
         </label>
+        <p className={`text-sm ${fileReady ? 'text-[#08663a]' : 'text-[#9b1c16]'}`}>{fileNote}</p>
         {message && <p className="text-sm font-medium text-[#9b1c16]">{message}</p>}
-        <button className="btn btn-primary" type="submit">
-          {t('submit')}
+        <button className="btn btn-primary" type="submit" disabled={busy || !fileReady || !selected} title={!fileReady ? fileNote : undefined}>
+          {busy ? t('sending') : t('submit')}
         </button>
       </form>
       <div className="space-y-3">

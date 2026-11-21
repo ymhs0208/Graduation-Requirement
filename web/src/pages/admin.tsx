@@ -1,9 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useConfirm, useLock, useUnsaved } from '../components/confirm'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
-import { api } from '../lib/api'
+import { api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { ImportPanel } from './import-panel'
 
 const statBar = ['bg-teal', 'bg-pine', 'bg-[#d0891f]', 'bg-[#c24134]']
 
@@ -95,6 +97,8 @@ export function AdminStats() {
 
 export function AdminReviews() {
   const { t, locale } = useI18n()
+  const confirm = useConfirm()
+  const { busy, run } = useLock()
   const client = useQueryClient()
   const query = useQuery({
     queryKey: ['reviews'],
@@ -148,23 +152,27 @@ export function AdminReviews() {
           <button
             className="btn btn-pass"
             type="button"
-            onClick={async () => {
+            disabled={busy}
+            onClick={() => run(async () => {
               await api(`/api/admin/reviews/${submission.id}`, { method: 'POST', body: { decision: 'APPROVED', comment } })
               setComment('')
               setCurrent(0)
               await client.invalidateQueries({ queryKey: ['reviews'] })
-            }}
+            })}
           >
-            {t('approve')}
+            {busy ? t('sending') : t('approve')}
           </button>
           <button
             className="btn btn-miss"
             type="button"
-            onClick={async () => {
+            disabled={busy}
+            onClick={() => run(async () => {
+              const ok = await confirm({ title: t('confirmTitle'), body: t('confirmReject'), confirm: t('reject'), danger: true })
+              if (!ok) return
               await api(`/api/admin/reviews/${submission.id}`, { method: 'POST', body: { decision: 'REJECTED', comment } })
               setComment('')
               await client.invalidateQueries({ queryKey: ['reviews'] })
-            }}
+            })}
           >
             {t('reject')}
           </button>
@@ -188,6 +196,8 @@ export function AdminReviews() {
 
 export function AdminUsers() {
   const { t, locale } = useI18n()
+  const confirm = useConfirm()
+  const { busy, run } = useLock()
   const client = useQueryClient()
   const query = useQuery({
     queryKey: ['users'],
@@ -195,19 +205,37 @@ export function AdminUsers() {
   })
   const [form, setForm] = useState({ account: '', nameZh: '', nameEn: '', email: '', role: 'STUDENT', cohortYear: 115 })
   const [temp, setTemp] = useState('')
+  const [formMessage, setFormMessage] = useState('')
+  const dirty = Boolean(form.account || form.nameZh || form.nameEn || form.email)
+  useUnsaved(dirty)
   if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  const accountOk = form.role === 'STUDENT' ? /^B\d{8}$/.test(form.account) : form.role === 'TEACHER' ? /^T\d{4}$/.test(form.account) : /^A\d{4}$/.test(form.account)
+  const emailOk = /^[^\s@]+@nutc\.edu\.tw$/i.test(form.email)
+  const nameOk = form.nameZh.trim().length > 0 && form.nameEn.trim().length > 0
+  const cohortOk = form.role !== 'STUDENT' || (form.cohortYear >= 100 && form.cohortYear <= 200)
+  const formIssues = [!accountOk ? t('badAccount') : '', !emailOk ? t('badEmail') : '', !nameOk ? t('needName') : '', !cohortOk ? t('badCohort') : ''].filter(Boolean)
   return (
     <div className="space-y-4">
+      <ImportPanel />
       <form
         className="card grid gap-2 p-4 md:grid-cols-3"
-        onSubmit={async (event) => {
+        onSubmit={(event) => {
           event.preventDefault()
-          const created = await api<{ tempPassword: string }>('/api/admin/users', {
-            method: 'POST',
-            body: { ...form, cohortYear: form.role === 'STUDENT' ? Number(form.cohortYear) : undefined },
+          if (formIssues.length) return
+          void run(async () => {
+            setFormMessage('')
+            try {
+              const created = await api<{ tempPassword: string }>('/api/admin/users', {
+                method: 'POST',
+                body: { ...form, cohortYear: form.role === 'STUDENT' ? Number(form.cohortYear) : undefined },
+              })
+              setTemp(created.tempPassword)
+              setForm({ account: '', nameZh: '', nameEn: '', email: '', role: 'STUDENT', cohortYear: 115 })
+              await client.invalidateQueries({ queryKey: ['users'] })
+            } catch (error) {
+              setFormMessage(errorMessage(error, locale, t('error')))
+            }
           })
-          setTemp(created.tempPassword)
-          await client.invalidateQueries({ queryKey: ['users'] })
         }}
       >
         {(['account', 'nameZh', 'nameEn', 'email'] as const).map((key) => (
@@ -219,10 +247,12 @@ export function AdminUsers() {
           <option>ADMIN</option>
         </select>
         <input className="field w-full" type="number" value={form.cohortYear} onChange={(event) => setForm({ ...form, cohortYear: Number(event.target.value) })} />
-        <button className="btn btn-ink" type="submit">
-          {t('save')}
+        <button className="btn btn-ink" type="submit" disabled={busy || formIssues.length > 0} title={formIssues[0] || undefined}>
+          {busy ? t('sending') : t('save')}
         </button>
       </form>
+      {formIssues.length > 0 && dirty && <p className="text-sm text-[#9b1c16]">{formIssues[0]}</p>}
+      {formMessage && <p className="text-sm font-medium text-[#9b1c16]">{formMessage}</p>}
       {temp && <p className="rounded-xl bg-[#fff4dc] px-3 py-2 text-sm font-medium text-[#7a4e00]">暫時密碼（只顯示一次）：{temp}</p>}
       <div className="card overflow-auto">
         <table className="data-table">
@@ -244,7 +274,7 @@ export function AdminUsers() {
                 <td>{user.status}</td>
                 <td>
                   {user.status === 'ACTIVE' ? (
-                    <button className="font-medium text-[#9b1c16] underline-offset-2 hover:underline" type="button" onClick={async () => { await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: { status: 'DEACTIVATED', deactivationReason: 'SUSPENDED' } }); await client.invalidateQueries({ queryKey: ['users'] }) }}>
+                    <button className="font-medium text-[#9b1c16] underline-offset-2 hover:underline" type="button" disabled={busy} onClick={() => run(async () => { const ok = await confirm({ title: t('confirmTitle'), body: `${user.account} ${t('confirmDeactivate')}`, confirm: t('deactivate'), danger: true }); if (!ok) return; await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: { status: 'DEACTIVATED', deactivationReason: 'SUSPENDED' } }); await client.invalidateQueries({ queryKey: ['users'] }) })}>
                       {t('deactivate')}
                     </button>
                   ) : (
@@ -264,6 +294,11 @@ export function AdminUsers() {
 
 export function AdminRules() {
   const { t, locale } = useI18n()
+  const confirm = useConfirm()
+  const { busy, run } = useLock()
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [ruleMessage, setRuleMessage] = useState('')
+  useUnsaved(Object.keys(drafts).length > 0)
   const query = useQuery({
     queryKey: ['rules'],
     queryFn: () =>
@@ -289,22 +324,53 @@ export function AdminRules() {
                 {category.isPlaceholder ? ` (${t('placeholder')})` : ''}
                 <input
                   className="field w-full"
-                  defaultValue={category.requiredCredits ?? ''}
-                  onBlur={async (event) => {
-                    const value = event.target.value === '' ? null : Number(event.target.value)
-                    await api(`/api/admin/rules/${rule.cohortYear}`, {
-                      method: 'PATCH',
-                      body: {
-                        categories: [{ id: category.id, requiredCredits: value, isPlaceholder: value == null, noteZh: category.noteZh, noteEn: category.noteEn }],
-                        totalCreditsConfirmed: value != null && category.isPlaceholder ? rule.totalCreditsConfirmed : rule.totalCreditsConfirmed,
-                      },
-                    })
-                    await client.invalidateQueries({ queryKey: ['rules'] })
-                  }}
+                  value={drafts[category.id] ?? (category.requiredCredits ?? '')}
+                  onChange={(event) => setDrafts({ ...drafts, [category.id]: event.target.value })}
                 />
               </label>
             ))}
           </div>
+          <button
+            className="btn btn-primary mt-4"
+            type="button"
+            disabled={busy || !rule.categories.some((category) => drafts[category.id] !== undefined)}
+            title={!rule.categories.some((category) => drafts[category.id] !== undefined) ? t('empty') : undefined}
+            onClick={() => run(async () => {
+              const changed = rule.categories.filter((category) => drafts[category.id] !== undefined)
+              if (!changed.length) return
+              if (changed.some((category) => drafts[category.id] !== '' && !Number.isFinite(Number(drafts[category.id])))) {
+                setRuleMessage(t('badCohort'))
+                return
+              }
+              const ok = await confirm({ title: t('confirmTitle'), body: t('confirmRules'), confirm: t('save') })
+              if (!ok) return
+              setRuleMessage('')
+              try {
+                await api(`/api/admin/rules/${rule.cohortYear}`, {
+                  method: 'PATCH',
+                  body: {
+                    categories: changed.map((category) => {
+                      const raw = drafts[category.id]
+                      const value = raw === '' ? null : Number(raw)
+                      return { id: category.id, requiredCredits: value, isPlaceholder: value == null, noteZh: category.noteZh, noteEn: category.noteEn }
+                    }),
+                    totalCreditsConfirmed: rule.totalCreditsConfirmed,
+                  },
+                })
+                setDrafts((current) => {
+                  const next = { ...current }
+                  for (const category of changed) delete next[category.id]
+                  return next
+                })
+                await client.invalidateQueries({ queryKey: ['rules'] })
+              } catch (error) {
+                setRuleMessage(errorMessage(error, locale, t('error')))
+              }
+            })}
+          >
+            {busy ? t('sending') : t('save')}
+          </button>
+          {ruleMessage && <p className="mt-2 text-sm text-[#9b1c16]">{ruleMessage}</p>}
         </section>
       ))}
     </div>
@@ -341,7 +407,7 @@ export function AdminRecognized() {
         </select>
         <input className="field w-full" placeholder="nameZh" value={form.nameZh} onChange={(event) => setForm({ ...form, nameZh: event.target.value })} required />
         <input className="field w-full" placeholder="nameEn" value={form.nameEn} onChange={(event) => setForm({ ...form, nameEn: event.target.value })} required />
-        <button className="btn btn-ink" type="submit">{t('save')}</button>
+        <button className="btn btn-ink" type="submit" disabled={!form.nameZh.trim() || !form.nameEn.trim()} title={!form.nameZh.trim() || !form.nameEn.trim() ? t('needName') : undefined}>{t('save')}</button>
       </form>
       <ul className="space-y-2">
         {query.data.items.length === 0 && <EmptyState>{t('empty')}</EmptyState>}
@@ -382,12 +448,15 @@ export function AdminAudit() {
 
 export function AdminRetention() {
   const { t } = useI18n()
+  const confirm = useConfirm()
+  const { busy, run } = useLock()
   const client = useQueryClient()
   const query = useQuery({
     queryKey: ['retention'],
     queryFn: () => api<{ retentionYears: number; preview: { users: { account: string; nameZh: string }[] } }>('/api/admin/retention'),
   })
   const [years, setYears] = useState(5)
+  useUnsaved(Boolean(query.data) && years !== query.data?.retentionYears)
   if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
   return (
     <div className="card space-y-4 p-5">
@@ -397,17 +466,19 @@ export function AdminRetention() {
         <input className="field ml-2 mt-0 w-24" type="number" value={years} onChange={(event) => setYears(Number(event.target.value))} />
       </label>
       <div className="flex flex-wrap gap-2">
-        <button className="btn btn-ghost" type="button" onClick={async () => { await api('/api/admin/retention', { method: 'PUT', body: { retentionYears: years } }); await client.invalidateQueries({ queryKey: ['retention'] }) }}>
-          {t('save')}
+        <button className="btn btn-ghost" type="button" disabled={busy || years === query.data.retentionYears || years < 1 || years > 30} title={years === query.data.retentionYears ? t('empty') : undefined} onClick={() => run(async () => { await api('/api/admin/retention', { method: 'PUT', body: { retentionYears: years } }); await client.invalidateQueries({ queryKey: ['retention'] }) })}>
+          {busy ? t('sending') : t('save')}
         </button>
         <button
           className="btn btn-miss"
           type="button"
-          onClick={async () => {
-            if (!confirm('確定依保存年限去識別？')) return
+          disabled={busy}
+          onClick={() => run(async () => {
+            const ok = await confirm({ title: t('confirmTitle'), body: t('confirmPurge'), confirm: t('confirmTitle'), danger: true })
+            if (!ok) return
             await api('/api/admin/retention/purge', { method: 'POST', body: { confirm: 'PURGE' } })
             await client.invalidateQueries({ queryKey: ['retention'] })
-          }}
+          })}
         >
           執行去識別
         </button>

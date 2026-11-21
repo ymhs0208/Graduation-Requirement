@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useLock, useUnsaved } from '../components/confirm'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
 import { api } from '../lib/api'
@@ -76,6 +77,8 @@ export function TeacherStudent() {
   const client = useQueryClient()
   const [preview, setPreview] = useState('')
   const [body, setBody] = useState('')
+  const { busy, run } = useLock()
+  useUnsaved(Boolean(body.trim()))
   const query = useQuery({
     queryKey: ['teacher-student', id],
     queryFn: () =>
@@ -119,17 +122,21 @@ export function TeacherStudent() {
         ))}
         <form
           className="card space-y-3 p-4"
-          onSubmit={async (event) => {
+          onSubmit={(event) => {
             event.preventDefault()
-            await api(`/api/teacher/students/${id}/comments`, { method: 'POST', body: { body } })
-            setBody('')
-            await client.invalidateQueries({ queryKey: ['teacher-student', id] })
+            if (!body.trim()) return
+            void run(async () => {
+              await api(`/api/teacher/students/${id}/comments`, { method: 'POST', body: { body } })
+              setBody('')
+              await client.invalidateQueries({ queryKey: ['teacher-student', id] })
+            })
           }}
         >
           <textarea className="field w-full" value={body} onChange={(event) => setBody(event.target.value)} placeholder={t('reminder')} />
-          <button className="btn btn-ink" type="submit">
-            {t('reminder')}
+          <button className="btn btn-ink" type="submit" disabled={busy || !body.trim()} title={!body.trim() ? t('reminderHint') : undefined}>
+            {busy ? t('sending') : t('reminder')}
           </button>
+          {!body.trim() && <p className="text-xs text-muted">{t('reminderHint')}</p>}
         </form>
         {query.data.comments.map((comment) => (
           <p key={comment.id} className="rounded-2xl bg-[#eef5f1] px-4 py-3 text-sm leading-6">
