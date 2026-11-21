@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String              @id @default(cuid())
+  account              String              @unique
+  email                String
+  nameZh               String
+  nameEn               String
+  passwordHash         String
+  role                 String
+  status               String              @default("ACTIVE")
+  deactivationReason   String?
+  deactivatedAt        DateTime?
+  anonymizedAt         DateTime?
+  mustChangePassword   Boolean             @default(false)
+  totpSecret           String?
+  totpEnabled          Boolean             @default(false)
+  failedLoginCount     Int                 @default(0)
+  lockedUntil          DateTime?
+  cohortYear           Int?
+  classId              String?
+  class                Class?              @relation("ClassStudents", fields: [classId], references: [id])
+  advisedClasses       Class[]             @relation("ClassAdvisor")
+  onboardingCompleted  Boolean             @default(false)
+  locale               String              @default("zh-Hant")
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  sessions             Session[]
+  resetTokens          PasswordReset[]
+  submissions          Submission[]        @relation("StudentSubmissions")
+  reviews              Submission[]        @relation("Reviewer")
+  teacherNotes         Submission[]        @relation("SubmissionTeacher")
+  commentsWritten      Comment[]           @relation("CommentAuthor")
+  commentsAbout        Comment[]           @relation("CommentStudent")
+  credits              CreditRecord[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@index([role, status])
+  @@index([classId])
+  @@index([cohortYear])
+}
+
+model Class {
+  id         String  @id @default(cuid())
+  nameZh     String
+  nameEn     String
+  cohortYear Int
+  advisorId  String?
+  advisor    User?   @relation("ClassAdvisor", fields: [advisorId], references: [id])
+  students   User[]  @relation("ClassStudents")
+
+  @@unique([nameZh, cohortYear])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  csrfSecret String
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  purpose   String
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([userId])
+}
+
+model RuleSet {
+  id                    String           @id @default(cuid())
+  cohortYear            Int              @unique
+  totalCredits          Int?
+  totalCreditsConfirmed Boolean          @default(false)
+  summaryZh             String
+  summaryEn             String
+  sourceNoteZh          String
+  sourceNoteEn          String
+  categories            CreditCategory[]
+  thresholds            Threshold[]
+  planItems             PlanItem[]
+}
+
+model CreditCategory {
+  id                 String  @id @default(cuid())
+  ruleSetId          String
+  ruleSet            RuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+  code               String
+  nameZh             String
+  nameEn             String
+  requiredCredits    Float?
+  countsTowardTotal  Boolean @default(true)
+  minDomains         Int?
+  isPlaceholder      Boolean @default(false)
+  noteZh             String
+  noteEn             String
+  sort               Int
+
+  @@unique([ruleSetId, code])
+}
+
+model Threshold {
+  id              String       @id @default(cuid())
+  ruleSetId       String
+  ruleSet         RuleSet      @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+  code            String
+  nameZh          String
+  nameEn          String
+  descriptionZh   String
+  descriptionEn   String
+  kind            String
+  isPlaceholder   Boolean      @default(false)
+  sourceUrl       String?
+  deadlineYear    Int?
+  deadlineSemester Int?
+  sort            Int
+  submissions     Submission[]
+
+  @@unique([ruleSetId, code])
+}
+
+model PlanItem {
+  id               String  @id @default(cuid())
+  ruleSetId        String
+  ruleSet          RuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+  studyYear        Int
+  nameZh           String
+  nameEn           String
+  moduleZh         String
+  moduleEn         String
+  requirementType  String
+  creditsConfirmed Boolean @default(false)
+  sourceNoteZh     String
+  sourceNoteEn     String
+  sort             Int
+
+  @@index([ruleSetId, studyYear])
+}
+
+model CreditRecord {
+  id           String   @id @default(cuid())
+  studentId    String
+  student      User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseNameZh String
+  courseNameEn String
+  categoryCode String
+  credits      Float
+  grade        String?
+  termYear     Int
+  termSemester Int
+  domain       String?
+  passed       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([studentId, categoryCode])
+}
+
+model RecognizedItem {
+  id           String       @id @default(cuid())
+  type         String
+  nameZh       String
+  nameEn       String
+  minScore     Float?
+  scoreLabelZh String?
+  scoreLabelEn String?
+  countsAsPass Boolean      @default(true)
+  active       Boolean      @default(true)
+  sourceUrl    String?
+  noteZh       String
+  noteEn       String
+  submissions  Submission[]
+}
+
+model Submission {
+  id                     String          @id @default(cuid())
+  studentId              String
+  student                User            @relation("StudentSubmissions", fields: [studentId], references: [id], onDelete: Cascade)
+  thresholdId            String
+  threshold              Threshold       @relation(fields: [thresholdId], references: [id])
+  recognizedItemId       String?
+  recognizedItem         RecognizedItem? @relation(fields: [recognizedItemId], references: [id])
+  scoreText              String?
+  note                   String?
+  status                 String          @default("PENDING")
+  reviewComment          String?
+  reviewerId             String?
+  reviewer               User?           @relation("Reviewer", fields: [reviewerId], references: [id])
+  teacherComment         String?
+  teacherRecommendation  String?
+  teacherId              String?
+  teacher                User?           @relation("SubmissionTeacher", fields: [teacherId], references: [id])
+  reviewedAt             DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  files                  Upload[]
+
+  @@index([studentId, status])
+  @@index([thresholdId])
+}
+
+model Upload {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  storageKey   String     @unique
+  originalName String
+  mimeType     String
+  size         Int
+  createdAt    DateTime   @default(now())
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  studentId String
+  student   User     @relation("CommentStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("CommentAuthor", fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind        String
+  titleZh     String
+  titleEn     String
+  bodyZh      String
+  bodyEn      String
+  readAt      DateTime?
+  emailTo     String?
+  emailStatus String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  to        String
+  subject   String
+  body      String
+  status    String
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  summaryZh  String
+  summaryEn  String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+model RetentionPolicy {
+  id             Int      @id @default(1)
+  retentionYears Int      @default(5)
+  updatedAt      DateTime @updatedAt
+}
+
+model PreAuditRun {
+  id           String   @id @default(cuid())
+  cohortYear   Int
+  runAt        DateTime @default(now())
+  triggeredBy  String?
+  studentCount Int
+  missingCount Int
+}
+
+model AppSetting {
+  key   String @id
+  value String
+}

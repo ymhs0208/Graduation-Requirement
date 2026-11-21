@@ -1,0 +1,8 @@
+process.env.NODE_ENV = 'test'
+process.env.VITEST = 'true'
+process.env.DATABASE_URL = 'postgresql://gradtrack:gradtrack@127.0.0.1:5432/gradtrack_test'
+process.env.UPLOAD_DIR = '/tmp/gradtrack-test-uploads'
+process.env.ARGON_MEMORY = '4096'
+process.env.ARGON_TIME = '1'
+process.env.COOKIE_SECURE = 'false'
+process.env.APP_ORIGIN = 'http://127.0.0.1:43123'
