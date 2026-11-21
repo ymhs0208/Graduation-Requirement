@@ -48,15 +48,34 @@ export function SkipLink() {
   return <a className="skip-link" href="#main">{t('skipToContent')}</a>
 }
 
+const FOOTER_TEXT = '國立臺中科技大學人工智慧應用工程學士學位學程 Copyright © NTCUST Bachelor Degree Program of Artificial Intelligence'
+
+export function SiteFooter() {
+  return (
+    <footer className="border-t border-line bg-white px-4 py-4 sm:px-6">
+      <a
+        className="mx-auto block max-w-4xl text-center text-sm font-medium leading-6 text-teal underline decoration-[#8fb8aa] underline-offset-4"
+        href="http://www.nutc.edu.tw/files/11-1000-150.php"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {FOOTER_TEXT}
+        <span className="sr-only">（另開新視窗）</span>
+      </a>
+    </footer>
+  )
+}
+
 export function Shell({ user, onLocale, children }: { user: SessionUser; onLocale: (locale: 'zh-Hant' | 'en') => void; children: ReactNode }) {
   const { t, locale } = useI18n()
   const navigate = useNavigate()
   const [pending, setPending] = useState('')
   const name = locale === 'en' ? user.nameEn : user.nameZh
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[272px_1fr]">
+    <div className="flex min-h-screen flex-col">
       <SkipLink />
-      <aside className="bg-pine text-white md:min-h-screen" aria-label={t('nav')}>
+      <div className="flex flex-1 flex-col md:grid md:grid-cols-[272px_1fr]">
+      <aside className="bg-pine text-white" aria-label={t('nav')}>
         <div className="h-1 bg-gold" />
         <div className="flex items-center gap-3 px-4 py-4 md:px-5 md:py-5">
           <img src="/brand/program-mark.png" alt={t('program')} className="h-11 w-11 shrink-0 rounded-xl bg-white object-contain p-1 shadow-sm" />
@@ -124,6 +143,8 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
         </header>
         <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-6 outline-none sm:px-6 sm:py-8">{children}</main>
       </div>
+      </div>
+      <SiteFooter />
     </div>
   )
 }

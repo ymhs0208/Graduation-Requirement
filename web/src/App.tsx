@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ConfirmProvider } from './components/confirm'
 import { ConnectionBanner, PageSkeleton, PendingButton, RouteProgress } from './components/feedback'
 import { Toaster } from 'sonner'
-import { Shell, SkipLink, type SessionUser } from './components/shell'
+import { Shell, SiteFooter, SkipLink, type SessionUser } from './components/shell'
 import { errorMessage, api } from './lib/api'
 import { I18nProvider, useI18n } from './lib/i18n'
 import { AdminAudit, AdminRecognized, AdminRetention, AdminReviews, AdminRules, AdminStats, AdminUsers } from './pages/admin'
@@ -34,7 +34,8 @@ function LoginPage() {
   return (
     <>
     <SkipLink />
-    <main id="main" tabIndex={-1} className="grid min-h-screen outline-none lg:grid-cols-[1.05fr_0.95fr]">
+    <div className="flex min-h-screen flex-col">
+    <main id="main" tabIndex={-1} className="grid flex-1 outline-none lg:grid-cols-[1.05fr_0.95fr]">
       <div className="relative hidden overflow-hidden bg-pine text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="absolute inset-x-0 top-0 h-1 bg-gold" />
         <img src="/brand/program-wordmark.png" alt={t('program')} className="h-16 w-fit rounded-xl bg-white object-contain p-2 shadow-md" />
@@ -100,6 +101,8 @@ function LoginPage() {
         </form>
       </div>
     </main>
+    <SiteFooter />
+    </div>
     </>
   )
 }
@@ -113,7 +116,8 @@ function PasswordPage() {
   return (
     <>
     <SkipLink />
-    <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-paper px-4 py-16 outline-none">
+    <div className="flex min-h-screen flex-col bg-paper">
+    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center px-4 py-16 outline-none">
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
         onSubmit={form.handleSubmit(async (values) => {
@@ -140,6 +144,8 @@ function PasswordPage() {
         </PendingButton>
       </form>
     </main>
+    <SiteFooter />
+    </div>
     </>
   )
 }
@@ -154,7 +160,8 @@ function ResetPage() {
   return (
     <>
     <SkipLink />
-    <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-paper px-4 py-16 outline-none">
+    <div className="flex min-h-screen flex-col bg-paper">
+    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center px-4 py-16 outline-none">
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
         onSubmit={async (event) => {
@@ -180,6 +187,8 @@ function ResetPage() {
         </PendingButton>
       </form>
     </main>
+    <SiteFooter />
+    </div>
     </>
   )
 }
@@ -195,7 +204,8 @@ function TotpPage() {
   return (
     <>
     <SkipLink />
-    <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-paper px-4 py-16 outline-none">
+    <div className="flex min-h-screen flex-col bg-paper">
+    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center px-4 py-16 outline-none">
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
       onSubmit={async (event) => {
@@ -218,6 +228,8 @@ function TotpPage() {
         </PendingButton>
       </form>
     </main>
+    <SiteFooter />
+    </div>
     </>
   )
 }
@@ -229,7 +241,7 @@ function Gate() {
   useEffect(() => {
     if (user?.locale === 'en' || user?.locale === 'zh-Hant') setLocale(user.locale)
   }, [user?.locale, setLocale])
-  if (query.isLoading) return <main id="main" className="p-8"><PageSkeleton /></main>
+  if (query.isLoading) return <div className="flex min-h-screen flex-col"><main id="main" className="flex-1 p-8"><PageSkeleton /></main><SiteFooter /></div>
   if (query.isError || !query.data || !user) return <LoginPage />
   if (user.mustChangePassword) return <PasswordPage />
   if (user.role === 'ADMIN' && !user.totpEnabled) return <TotpPage />
