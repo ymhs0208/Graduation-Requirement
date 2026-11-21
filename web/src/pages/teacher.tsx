@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useLock, useUnsaved } from '../components/confirm'
+import { PageSkeleton, PendingLabel, TableSkeleton } from '../components/feedback'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
 import { api } from '../lib/api'
@@ -28,7 +29,7 @@ export function TeacherHome() {
     queryKey: ['roster', atRisk],
     queryFn: () => api<{ students: Row[] }>(`/api/teacher/students${atRisk ? '?atRisk=1' : ''}`),
   })
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <TableSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   return (
     <div className="space-y-4">
       <label className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium shadow-sm ring-1 ring-line">
@@ -89,7 +90,7 @@ export function TeacherStudent() {
         comments: { id: string; body: string; createdAt: string }[]
       }>(`/api/teacher/students/${id}`),
   })
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   const student = query.data.student
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -126,7 +127,7 @@ export function TeacherStudent() {
             event.preventDefault()
             if (!body.trim()) return
             void run(async () => {
-              await api(`/api/teacher/students/${id}/comments`, { method: 'POST', body: { body } })
+              await api(`/api/teacher/students/${id}/comments`, { method: 'POST', body: { body }, success: t('saved') })
               setBody('')
               await client.invalidateQueries({ queryKey: ['teacher-student', id] })
             })
@@ -134,7 +135,7 @@ export function TeacherStudent() {
         >
           <textarea className="field w-full" value={body} onChange={(event) => setBody(event.target.value)} placeholder={t('reminder')} />
           <button className="btn btn-ink" type="submit" disabled={busy || !body.trim()} title={!body.trim() ? t('reminderHint') : undefined}>
-            {busy ? t('sending') : t('reminder')}
+            <PendingLabel pending={busy}>{t('reminder')}</PendingLabel>
           </button>
           {!body.trim() && <p className="text-xs text-muted">{t('reminderHint')}</p>}
         </form>

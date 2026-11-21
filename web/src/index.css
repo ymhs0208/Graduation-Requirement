@@ -99,6 +99,17 @@ body {
     opacity: 0.55;
   }
 
+  .route-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 80;
+    height: 3px;
+    background: #0e6b56;
+    box-shadow: 0 0 8px rgba(14, 107, 86, 0.45);
+    transition: width 0.2s ease;
+  }
+
   .btn-primary {
     background: var(--color-teal);
     color: #fff;

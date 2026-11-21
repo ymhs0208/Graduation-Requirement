@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLock, useUnsaved } from '../components/confirm'
+import { PageSkeleton, PendingLabel, TableSkeleton, UploadProgress } from '../components/feedback'
 import { api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { DocumentPreview } from '../components/preview'
@@ -51,7 +52,8 @@ export function StudentHome() {
   const query = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dashboard>('/api/me/dashboard') })
   const client = useQueryClient()
   const [step, setStep] = useState(0)
-  if (query.isLoading) return <p className="text-sm text-muted">{t('loading')}</p>
+  const [leaving, setLeaving] = useState(false)
+  if (query.isLoading) return <PageSkeleton />
   if (query.isError || !query.data) return <p className="text-sm text-[#9b1c16]">{t('error')}</p>
   const { profile, progress } = query.data
   const ratio = progress.requiredTotal ? progress.earnedTowardTotal / progress.requiredTotal : 0
@@ -71,23 +73,35 @@ export function StudentHome() {
               <button
                 className="btn btn-primary"
                 type="button"
+                disabled={leaving}
                 onClick={async () => {
-                  await api('/api/me/onboarding', { method: 'POST', body: {} })
-                  await client.invalidateQueries({ queryKey: ['dashboard'] })
+                  setLeaving(true)
+                  try {
+                    await api('/api/me/onboarding', { method: 'POST', body: {}, success: t('saved') })
+                    await client.invalidateQueries({ queryKey: ['dashboard'] })
+                  } finally {
+                    setLeaving(false)
+                  }
                 }}
               >
-                {t('done')}
+                <PendingLabel pending={leaving}>{t('done')}</PendingLabel>
               </button>
             )}
             <button
               className="btn btn-ghost"
               type="button"
+              disabled={leaving}
               onClick={async () => {
-                await api('/api/me/onboarding', { method: 'POST', body: {} })
-                await client.invalidateQueries({ queryKey: ['dashboard'] })
+                setLeaving(true)
+                try {
+                  await api('/api/me/onboarding', { method: 'POST', body: {}, success: t('saved') })
+                  await client.invalidateQueries({ queryKey: ['dashboard'] })
+                } finally {
+                  setLeaving(false)
+                }
               }}
             >
-              {t('skip')}
+              <PendingLabel pending={leaving}>{t('skip')}</PendingLabel>
             </button>
           </div>
         </div>
@@ -163,7 +177,7 @@ export function PlanPage() {
     queryKey: ['plan'],
     queryFn: () => api<{ items: { id: string; studyYear: number; nameZh: string; nameEn: string; moduleZh: string; moduleEn: string; requirementType: string; sourceNoteZh: string; sourceNoteEn: string }[]; progress: Progress }>('/api/me/plan'),
   })
-  if (query.isLoading) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading) return <PageSkeleton />
   if (!query.data) return <p className="text-sm text-[#9b1c16]">{t('error')}</p>
   const years = [1, 2, 3, 4]
   return (
@@ -210,8 +224,10 @@ export function EvidencePage() {
   const [file, setFile] = useState<File | null>(null)
   const [message, setMessage] = useState('')
   const [preview, setPreview] = useState('')
-  useUnsaved(Boolean(file || score || note))
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  const [percent, setPercent] = useState<number | null>(null)
+  const uploadAbort = useRef<AbortController | null>(null)
+  useUnsaved(Boolean(file || score || note || percent !== null))
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('loading')}</p>
   const fileReady = Boolean(file && file.size <= 8 * 1024 * 1024 && (/^(application\/pdf|image\/png|image\/jpeg)$/.test(file.type) || /\.(pdf|png|jpe?g)$/i.test(file.name)))
   const fileNote = !file ? t('needFile') : file.size > 8 * 1024 * 1024 ? t('uploadTooBig') : fileReady ? t('uploadReady') : t('uploadType')
   const thresholds = query.data.progress.thresholds.filter((item) => item.state !== 'info')
@@ -231,13 +247,19 @@ export function EvidencePage() {
           if (score) form.set('scoreText', score)
           if (note) form.set('note', note)
           form.set('files', file)
+          const controller = new AbortController()
+          uploadAbort.current = controller
+          setPercent(0)
           try {
-            await api('/api/me/submissions', { method: 'POST', form })
+            await api('/api/me/submissions', { method: 'POST', form, onProgress: setPercent, signal: controller.signal, success: t('submitted') })
             setMessage('')
             setFile(null)
             await client.invalidateQueries({ queryKey: ['dashboard'] })
           } catch (error) {
             setMessage(errorMessage(error, locale, t('error')))
+          } finally {
+            uploadAbort.current = null
+            setPercent(null)
           }
           })
         }}
@@ -287,9 +309,10 @@ export function EvidencePage() {
           <input className="sr-only" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
         </label>
         <p className={`text-sm ${fileReady ? 'text-[#08663a]' : 'text-[#9b1c16]'}`}>{fileNote}</p>
+        {percent !== null && <UploadProgress percent={percent} onCancel={() => uploadAbort.current?.abort()} />}
         {message && <p className="text-sm font-medium text-[#9b1c16]">{message}</p>}
         <button className="btn btn-primary" type="submit" disabled={busy || !fileReady || !selected} title={!fileReady ? fileNote : undefined}>
-          {busy ? t('sending') : t('submit')}
+          <PendingLabel pending={busy}>{t('submit')}</PendingLabel>
         </button>
       </form>
       <div className="space-y-3">
@@ -325,7 +348,7 @@ export function NotificationsPage() {
     queryKey: ['notes'],
     queryFn: () => api<{ notifications: { id: string; titleZh: string; titleEn: string; bodyZh: string; bodyEn: string; readAt: string | null; createdAt: string }[] }>('/api/inbox'),
   })
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <TableSkeleton /> : <p className="text-sm text-muted">{t('loading')}</p>
   return (
     <div className="space-y-3">
       {query.data.notifications.length === 0 && <EmptyState>{t('empty')}</EmptyState>}

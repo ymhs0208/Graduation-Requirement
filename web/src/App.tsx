@@ -6,6 +6,8 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ConfirmProvider } from './components/confirm'
+import { ConnectionBanner, PageSkeleton, PendingButton, RouteProgress } from './components/feedback'
+import { Toaster } from 'sonner'
 import { Shell, type SessionUser } from './components/shell'
 import { errorMessage, api } from './lib/api'
 import { I18nProvider, useI18n } from './lib/i18n'
@@ -21,6 +23,7 @@ type Me = { user: SessionUser; csrfToken: string }
 function LoginPage() {
   const { t, locale } = useI18n()
   const [message, setMessage] = useState('')
+  const [pending, setPending] = useState(false)
   const [forgot, setForgot] = useState(false)
   const schema = z.object({
     account: z.string().min(4),
@@ -46,9 +49,10 @@ function LoginPage() {
           className="card w-full max-w-md space-y-4 p-6 sm:p-8"
           onSubmit={form.handleSubmit(async (values) => {
             setMessage('')
+            setPending(true)
             try {
               if (forgot) {
-                await api('/api/auth/forgot', { method: 'POST', body: { account: values.account } })
+                await api('/api/auth/forgot', { method: 'POST', body: { account: values.account }, success: t('forgotSent') })
                 setMessage(t('forgotSent'))
                 return
               }
@@ -56,6 +60,8 @@ function LoginPage() {
               window.location.href = '/'
             } catch (error) {
               setMessage(errorMessage(error, locale, t('error')))
+            } finally {
+              setPending(false)
             }
           })}
         >
@@ -83,9 +89,9 @@ function LoginPage() {
             </label>
           )}
           {message && <p className="rounded-xl bg-[#fdeceb] px-3 py-2 text-sm font-medium text-[#9b1c16]">{message}</p>}
-          <button className="btn btn-primary w-full" type="submit">
+          <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
             {forgot ? t('forgot') : t('login')}
-          </button>
+          </PendingButton>
           <button className="text-sm font-medium text-teal underline-offset-2 hover:underline" type="button" onClick={() => setForgot(!forgot)}>
             {t('forgot')}
           </button>
@@ -96,7 +102,9 @@ function LoginPage() {
 }
 
 function PasswordPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const [pending, setPending] = useState(false)
+  const [message, setMessage] = useState('')
   const schema = z.object({ currentPassword: z.string().min(1), nextPassword: z.string().min(12) })
   const form = useForm({ resolver: zodResolver(schema) })
   return (
@@ -104,8 +112,16 @@ function PasswordPage() {
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
         onSubmit={form.handleSubmit(async (values) => {
-          await api('/api/auth/password', { method: 'POST', body: values })
-          window.location.href = '/'
+          setPending(true)
+          setMessage('')
+          try {
+            await api('/api/auth/password', { method: 'POST', body: values, success: t('saved') })
+            window.location.href = '/'
+          } catch (error) {
+            setMessage(errorMessage(error, locale, t('error')))
+          } finally {
+            setPending(false)
+          }
         })}
       >
         <img src="/brand/program-mark.png" alt="" className="h-12 w-12 rounded-xl object-contain" />
@@ -113,9 +129,10 @@ function PasswordPage() {
         <p className="text-sm text-muted">{t('passwordRule')}</p>
         <input className="field w-full" type="password" placeholder={t('currentPassword')} {...form.register('currentPassword')} />
         <input className="field w-full" type="password" placeholder={t('nextPassword')} {...form.register('nextPassword')} />
-        <button className="btn btn-primary w-full" type="submit">
+        {message && <p className="text-sm font-medium text-[#9b1c16]">{message}</p>}
+        <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
-        </button>
+        </PendingButton>
       </form>
     </div>
   )
@@ -127,17 +144,22 @@ function ResetPage() {
   const token = new URLSearchParams(window.location.search).get('token') ?? ''
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
+  const [pending, setPending] = useState(false)
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-16">
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
         onSubmit={async (event) => {
           event.preventDefault()
+          setPending(true)
+          setMessage('')
           try {
-            await api('/api/auth/reset', { method: 'POST', body: { token, password } })
+            await api('/api/auth/reset', { method: 'POST', body: { token, password }, success: t('saved') })
             navigate('/login')
           } catch (error) {
             setMessage(errorMessage(error, locale, t('error')))
+          } finally {
+            setPending(false)
           }
         }}
       >
@@ -145,9 +167,9 @@ function ResetPage() {
         <h1 className="text-2xl font-bold tracking-tight">{t('changePassword')}</h1>
         <input className="field w-full" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
         {message && <p className="rounded-xl bg-[#fdeceb] px-3 py-2 text-sm font-medium text-[#9b1c16]">{message}</p>}
-        <button className="btn btn-primary w-full" type="submit">
+        <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
-        </button>
+        </PendingButton>
       </form>
     </div>
   )
@@ -157,6 +179,7 @@ function TotpPage() {
   const { t } = useI18n()
   const [secret, setSecret] = useState('')
   const [token, setToken] = useState('')
+  const [pending, setPending] = useState(false)
   useEffect(() => {
     api<{ secret: string }>('/api/auth/totp/setup', { method: 'POST', body: {} }).then((data) => setSecret(data.secret))
   }, [])
@@ -164,19 +187,24 @@ function TotpPage() {
     <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-16">
       <form
         className="card w-full max-w-md space-y-4 p-6 sm:p-8"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          await api('/api/auth/totp/enable', { method: 'POST', body: { token } })
+      onSubmit={async (event) => {
+        event.preventDefault()
+        setPending(true)
+        try {
+          await api('/api/auth/totp/enable', { method: 'POST', body: { token }, success: t('saved') })
           window.location.href = '/'
-        }}
+        } finally {
+          setPending(false)
+        }
+      }}
       >
         <img src="/brand/program-mark.png" alt="" className="h-12 w-12 rounded-xl object-contain" />
         <h1 className="text-2xl font-bold tracking-tight">{t('setupTotp')}</h1>
         <p className="break-all rounded-xl bg-[#eef5f1] p-3 font-mono text-sm text-ink">{secret}</p>
         <input className="field w-full" value={token} onChange={(event) => setToken(event.target.value)} />
-        <button className="btn btn-primary w-full" type="submit">
+        <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
-        </button>
+        </PendingButton>
       </form>
     </div>
   )
@@ -189,7 +217,7 @@ function Gate() {
   useEffect(() => {
     if (user?.locale === 'en' || user?.locale === 'zh-Hant') setLocale(user.locale)
   }, [user?.locale, setLocale])
-  if (query.isLoading) return <p className="p-8 text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading) return <div className="p-8"><PageSkeleton /></div>
   if (query.isError || !query.data || !user) return <LoginPage />
   if (user.mustChangePassword) return <PasswordPage />
   if (user.role === 'ADMIN' && !user.totpEnabled) return <TotpPage />
@@ -229,6 +257,9 @@ export default function App() {
       <I18nProvider>
         <ConfirmProvider>
         <BrowserRouter>
+          <RouteProgress />
+          <ConnectionBanner />
+          <Toaster position="top-center" richColors closeButton />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/reset" element={<ResetPage />} />

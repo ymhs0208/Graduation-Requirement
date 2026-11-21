@@ -1,7 +1,8 @@
-import { useId, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { PendingLabel } from './feedback'
 
 export type SessionUser = {
   id: string
@@ -44,6 +45,7 @@ const links = {
 export function Shell({ user, onLocale, children }: { user: SessionUser; onLocale: (locale: 'zh-Hant' | 'en') => void; children: ReactNode }) {
   const { t, locale } = useI18n()
   const navigate = useNavigate()
+  const [pending, setPending] = useState('')
   const name = locale === 'en' ? user.nameEn : user.nameZh
   return (
     <div className="min-h-screen md:grid md:grid-cols-[272px_1fr]">
@@ -81,23 +83,35 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
             <button
               className="btn btn-ghost"
               type="button"
-              onClick={() => {
+              disabled={pending === 'locale'}
+              onClick={async () => {
                 const next = locale === 'en' ? 'zh-Hant' : 'en'
-                onLocale(next)
-                document.documentElement.lang = next === 'en' ? 'en' : 'zh-Hant'
+                setPending('locale')
+                try {
+                  await onLocale(next)
+                  document.documentElement.lang = next === 'en' ? 'en' : 'zh-Hant'
+                } finally {
+                  setPending('')
+                }
               }}
             >
-              {t('language')}
+              <PendingLabel pending={pending === 'locale'}>{t('language')}</PendingLabel>
             </button>
             <button
               className="btn btn-ink"
               type="button"
+              disabled={pending === 'logout'}
               onClick={async () => {
-                await api('/api/auth/logout', { method: 'POST', body: {} })
-                navigate('/login')
+                setPending('logout')
+                try {
+                  await api('/api/auth/logout', { method: 'POST', body: {} })
+                  navigate('/login')
+                } finally {
+                  setPending('')
+                }
               }}
             >
-              {t('logout')}
+              <PendingLabel pending={pending === 'logout'}>{t('logout')}</PendingLabel>
             </button>
           </div>
         </header>

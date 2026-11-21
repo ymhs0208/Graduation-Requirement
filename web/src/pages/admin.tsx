@@ -4,6 +4,7 @@ import { useConfirm, useLock, useUnsaved } from '../components/confirm'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
 import { api, errorMessage } from '../lib/api'
+import { PageSkeleton, PendingLabel, StepStatus } from '../components/feedback'
 import { useI18n } from '../lib/i18n'
 import { ImportPanel } from './import-panel'
 
@@ -17,7 +18,10 @@ export function AdminStats() {
     queryFn: () => api<{ cohortYear: number; cohorts: number[]; stats: { students: number; englishPassRate: number; certificationRate: number; atRisk: number; delayed: number; ready: number; blocked: number; needsOffice: number } | null; students: { account: string; nameZh: string; nameEn: string; verdict: string; atRisk: boolean; english: string }[] }>(`/api/admin/stats${cohort ? `?cohort=${cohort}` : ''}`),
   })
   const client = useQueryClient()
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  const { busy, run } = useLock()
+  const [job, setJob] = useState<'export' | 'preaudit' | ''>('')
+  const [step, setStep] = useState(-1)
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   const stats = query.data.stats
   return (
     <div className="space-y-5">
@@ -32,20 +36,56 @@ export function AdminStats() {
             ))}
           </select>
         </label>
-        <a className="btn btn-ghost" href={`/api/admin/export?cohort=${query.data.cohortYear}`}>
-          {t('export')}
-        </a>
+        <button
+          className="btn btn-ghost"
+          type="button"
+          disabled={busy}
+          onClick={() => run(async () => {
+            setJob('export')
+            setStep(0)
+            try {
+              const response = await fetch(`/api/admin/export?cohort=${query.data?.cohortYear}`, { credentials: 'include' })
+              if (!response.ok) throw new Error('export')
+              setStep(1)
+              const blob = await response.blob()
+              const url = URL.createObjectURL(blob)
+              const link = document.createElement('a')
+              link.href = url
+              link.download = `graduation-${query.data?.cohortYear}.csv`
+              link.click()
+              URL.revokeObjectURL(url)
+              setStep(2)
+              const { toast } = await import('sonner')
+              toast.success(t('exportDone'))
+            } finally {
+              window.setTimeout(() => { setJob(''); setStep(-1) }, 900)
+            }
+          })}
+        >
+          <PendingLabel pending={busy && job === 'export'}>{t('export')}</PendingLabel>
+        </button>
         <button
           className="btn btn-primary"
           type="button"
-          onClick={async () => {
-            await api('/api/admin/preaudit', { method: 'POST', body: { cohortYear: query.data?.cohortYear } })
-            await client.invalidateQueries({ queryKey: ['notes'] })
-          }}
+          disabled={busy}
+          onClick={() => run(async () => {
+            setJob('preaudit')
+            setStep(0)
+            try {
+              await api('/api/admin/preaudit', { method: 'POST', body: { cohortYear: query.data?.cohortYear }, success: t('preauditDone'), timeout: 60000 })
+              setStep(1)
+              await client.invalidateQueries({ queryKey: ['notes'] })
+              setStep(2)
+            } finally {
+              window.setTimeout(() => { setJob(''); setStep(-1) }, 900)
+            }
+          })}
         >
-          {t('preaudit')}
+          <PendingLabel pending={busy && job === 'preaudit'}>{t('preaudit')}</PendingLabel>
         </button>
       </div>
+      {job === 'export' && step >= 0 && <StepStatus steps={[t('stepExport'), t('stepDownload'), t('stepDone')]} current={step} />}
+      {job === 'preaudit' && step >= 0 && <StepStatus steps={[t('stepScan'), t('stepNotify'), t('stepDone')]} current={step} />}
       {stats && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
@@ -120,7 +160,7 @@ export function AdminReviews() {
   const [current, setCurrent] = useState(0)
   const [comment, setComment] = useState('')
   const [fileId, setFileId] = useState('')
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   const submission = query.data.submissions[current]
   if (!submission) return <EmptyState>{t('empty')}</EmptyState>
   const activeFile = fileId || submission.files[0]?.id
@@ -154,13 +194,13 @@ export function AdminReviews() {
             type="button"
             disabled={busy}
             onClick={() => run(async () => {
-              await api(`/api/admin/reviews/${submission.id}`, { method: 'POST', body: { decision: 'APPROVED', comment } })
+              await api(`/api/admin/reviews/${submission.id}`, { method: 'POST', body: { decision: 'APPROVED', comment }, success: t('saved') })
               setComment('')
               setCurrent(0)
               await client.invalidateQueries({ queryKey: ['reviews'] })
             })}
           >
-            {busy ? t('sending') : t('approve')}
+            <PendingLabel pending={busy}>{t('approve')}</PendingLabel>
           </button>
           <button
             className="btn btn-miss"
@@ -169,12 +209,12 @@ export function AdminReviews() {
             onClick={() => run(async () => {
               const ok = await confirm({ title: t('confirmTitle'), body: t('confirmReject'), confirm: t('reject'), danger: true })
               if (!ok) return
-              await api(`/api/admin/reviews/${submission.id}`, { method: 'POST', body: { decision: 'REJECTED', comment } })
+              await api(`/api/admin/reviews/${submission.id}`, { method: 'POST', body: { decision: 'REJECTED', comment }, success: t('saved') })
               setComment('')
               await client.invalidateQueries({ queryKey: ['reviews'] })
             })}
           >
-            {t('reject')}
+            <PendingLabel pending={busy}>{t('reject')}</PendingLabel>
           </button>
         </div>
         <div className="flex flex-wrap gap-2 text-sm">
@@ -208,7 +248,7 @@ export function AdminUsers() {
   const [formMessage, setFormMessage] = useState('')
   const dirty = Boolean(form.account || form.nameZh || form.nameEn || form.email)
   useUnsaved(dirty)
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   const accountOk = form.role === 'STUDENT' ? /^B\d{8}$/.test(form.account) : form.role === 'TEACHER' ? /^T\d{4}$/.test(form.account) : /^A\d{4}$/.test(form.account)
   const emailOk = /^[^\s@]+@nutc\.edu\.tw$/i.test(form.email)
   const nameOk = form.nameZh.trim().length > 0 && form.nameEn.trim().length > 0
@@ -228,6 +268,7 @@ export function AdminUsers() {
               const created = await api<{ tempPassword: string }>('/api/admin/users', {
                 method: 'POST',
                 body: { ...form, cohortYear: form.role === 'STUDENT' ? Number(form.cohortYear) : undefined },
+                success: t('saved'),
               })
               setTemp(created.tempPassword)
               setForm({ account: '', nameZh: '', nameEn: '', email: '', role: 'STUDENT', cohortYear: 115 })
@@ -248,7 +289,7 @@ export function AdminUsers() {
         </select>
         <input className="field w-full" type="number" value={form.cohortYear} onChange={(event) => setForm({ ...form, cohortYear: Number(event.target.value) })} />
         <button className="btn btn-ink" type="submit" disabled={busy || formIssues.length > 0} title={formIssues[0] || undefined}>
-          {busy ? t('sending') : t('save')}
+          <PendingLabel pending={busy}>{t('save')}</PendingLabel>
         </button>
       </form>
       {formIssues.length > 0 && dirty && <p className="text-sm text-[#9b1c16]">{formIssues[0]}</p>}
@@ -307,7 +348,7 @@ export function AdminRules() {
       }>('/api/admin/rules'),
   })
   const client = useQueryClient()
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   return (
     <div className="space-y-6">
       {query.data.rules.map((rule) => (
@@ -347,6 +388,7 @@ export function AdminRules() {
               setRuleMessage('')
               try {
                 await api(`/api/admin/rules/${rule.cohortYear}`, {
+                  success: t('saved'),
                   method: 'PATCH',
                   body: {
                     categories: changed.map((category) => {
@@ -368,7 +410,7 @@ export function AdminRules() {
               }
             })}
           >
-            {busy ? t('sending') : t('save')}
+            <PendingLabel pending={busy}>{t('save')}</PendingLabel>
           </button>
           {ruleMessage && <p className="mt-2 text-sm text-[#9b1c16]">{ruleMessage}</p>}
         </section>
@@ -385,7 +427,7 @@ export function AdminRecognized() {
     queryFn: () => api<{ items: { id: string; type: string; nameZh: string; nameEn: string; minScore: number | null; active: boolean; sourceUrl: string | null }[] }>('/api/admin/recognized'),
   })
   const [form, setForm] = useState({ type: 'CERTIFICATION', nameZh: '', nameEn: '', minScore: '' })
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   return (
     <div className="space-y-4">
       <form
@@ -432,7 +474,7 @@ export function AdminAudit() {
     queryKey: ['audit'],
     queryFn: () => api<{ logs: { id: string; action: string; summaryZh: string; summaryEn: string; createdAt: string; actor: { account: string } | null }[] }>('/api/admin/audit'),
   })
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   return (
     <ul className="space-y-2">
       {query.data.logs.length === 0 && <EmptyState>{t('empty')}</EmptyState>}
@@ -457,7 +499,7 @@ export function AdminRetention() {
   })
   const [years, setYears] = useState(5)
   useUnsaved(Boolean(query.data) && years !== query.data?.retentionYears)
-  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
   return (
     <div className="card space-y-4 p-5">
       <p className="leading-7">停用後保存 {query.data.retentionYears} 年，到期可去識別並刪除上傳檔。目前可清除 {query.data.preview.users.length} 筆。</p>
@@ -467,7 +509,7 @@ export function AdminRetention() {
       </label>
       <div className="flex flex-wrap gap-2">
         <button className="btn btn-ghost" type="button" disabled={busy || years === query.data.retentionYears || years < 1 || years > 30} title={years === query.data.retentionYears ? t('empty') : undefined} onClick={() => run(async () => { await api('/api/admin/retention', { method: 'PUT', body: { retentionYears: years } }); await client.invalidateQueries({ queryKey: ['retention'] }) })}>
-          {busy ? t('sending') : t('save')}
+          <PendingLabel pending={busy}>{t('save')}</PendingLabel>
         </button>
         <button
           className="btn btn-miss"

@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLock, useUnsaved } from '../components/confirm'
+import { PendingLabel, StepStatus, UploadProgress } from '../components/feedback'
 import { api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 
@@ -41,7 +42,10 @@ export function ImportPanel() {
   const [conflict, setConflict] = useState<'skip' | 'update'>('skip')
   const [message, setMessage] = useState('')
   const [passwords, setPasswords] = useState<{ account: string; tempPassword: string }[]>([])
-  useUnsaved(Boolean(preview))
+  const [percent, setPercent] = useState<number | null>(null)
+  const [commitStep, setCommitStep] = useState(-1)
+  const uploadAbort = useRef<AbortController | null>(null)
+  useUnsaved(Boolean(preview || percent !== null))
   const fileNote = !file ? t('importNeedCsv') : !file.name.toLowerCase().endsWith('.csv') ? t('importCsvType') : file.size > 500_000 ? t('importCsvSize') : ''
   const writable = (preview?.counts.valid ?? 0) + (conflict === 'update' ? preview?.counts.conflict ?? 0 : 0)
   const commitDisabled = busy || !preview || writable === 0
@@ -89,17 +93,24 @@ export function ImportPanel() {
             const form = new FormData()
             form.set('kind', kind)
             form.set('file', file)
+            const controller = new AbortController()
+            uploadAbort.current = controller
+            setPercent(0)
             try {
-              setPreview(await api<Preview>('/api/admin/import/preview', { method: 'POST', form }))
+              setPreview(await api<Preview>('/api/admin/import/preview', { method: 'POST', form, onProgress: setPercent, signal: controller.signal }))
             } catch (error) {
               setPreview(null)
               setMessage(errorMessage(error, locale, t('error')))
+            } finally {
+              uploadAbort.current = null
+              setPercent(null)
             }
           })
         }
       >
-        {busy ? t('sending') : t('importPreview')}
+        <PendingLabel pending={busy && percent !== null}>{t('importPreview')}</PendingLabel>
       </button>
+      {percent !== null && <UploadProgress percent={percent} onCancel={() => uploadAbort.current?.abort()} />}
       {preview && (
         <>
           <div className="flex flex-wrap gap-2 text-sm">
@@ -151,22 +162,29 @@ export function ImportPanel() {
                 run(async () => {
                   if (commitDisabled || !preview) return
                   setMessage('')
+                  setCommitStep(0)
                   try {
+                    setCommitStep(1)
                     const result = await api<{ committed: number; updated: number; skipped: number; activations?: { account: string; tempPassword: string }[] }>('/api/admin/import/commit', {
                       method: 'POST',
                       body: { previewId: preview.previewId, conflict, confirm: true },
+                      timeout: 120000,
+                      success: t('importDone'),
                     })
+                    setCommitStep(2)
                     setPasswords(result.activations ?? [])
                     setMessage(`${t('importResult')} ${result.committed} / ${result.updated} / ${result.skipped}`)
                     setPreview(null)
                     setFile(null)
                   } catch (error) {
                     setMessage(errorMessage(error, locale, t('error')))
+                  } finally {
+                    window.setTimeout(() => setCommitStep(-1), 1200)
                   }
                 })
               }
             >
-              {t('importCommit')}
+              <PendingLabel pending={busy && commitStep >= 0}>{t('importCommit')}</PendingLabel>
             </button>
             <button
               className="btn btn-ghost"
@@ -178,6 +196,7 @@ export function ImportPanel() {
               {t('importErrors')}
             </button>
           </div>
+          {commitStep >= 0 && <StepStatus steps={[t('stepCheck'), t('stepWrite'), t('stepDone')]} current={commitStep} />}
           {commitDisabled && preview && writable === 0 && <p className="text-sm text-muted">{t('importNoValid')}</p>}
         </>
       )}
