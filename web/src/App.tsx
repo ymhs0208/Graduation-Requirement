@@ -19,7 +19,6 @@ type Me = { user: SessionUser; csrfToken: string }
 
 function LoginPage() {
   const { t } = useI18n()
-  const navigate = useNavigate()
   const [message, setMessage] = useState('')
   const [forgot, setForgot] = useState(false)
   const schema = z.object({
@@ -29,84 +28,95 @@ function LoginPage() {
   })
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { account: '', password: '', totp: '' } })
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="hidden bg-ink text-stone-100 lg:flex lg:flex-col lg:justify-between lg:p-10">
-        <img src="/brand/program-wordmark.png" alt="" className="h-16 w-auto bg-white object-contain p-2" />
+    <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="relative hidden overflow-hidden bg-pine text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gold" />
+        <img src="/brand/program-wordmark.png" alt="" className="h-16 w-fit rounded-xl bg-white object-contain p-2 shadow-md" />
         <div>
-          <p className="text-3xl font-semibold">國立臺中科技大學</p>
-          <p className="mt-2 text-stone-300">人工智慧應用工程學士學位學程</p>
+          <p className="text-xs font-semibold tracking-[0.18em] text-emerald-100/75">NATIONAL TAICHUNG UNIVERSITY OF SCIENCE AND TECHNOLOGY</p>
+          <p className="mt-4 text-4xl font-bold tracking-tight">國立臺中科技大學</p>
+          <p className="mt-2 text-lg text-emerald-50/90">人工智慧應用工程學士學位學程</p>
+          <p className="mt-6 max-w-md text-sm leading-7 text-emerald-50/75">從入學看到畢業，規則、學分與證明放在同一頁。</p>
         </div>
-        <p className="text-sm text-stone-400">從入學看到畢業，規則、學分與證明放在同一頁。</p>
+        <p className="text-xs text-emerald-100/60">畢業門檻追蹤</p>
       </div>
-      <form
-        className="mx-auto flex w-full max-w-md flex-col justify-center gap-3 px-6 py-12"
-        onSubmit={form.handleSubmit(async (values) => {
-          setMessage('')
-          try {
-            if (forgot) {
-              await api('/api/auth/forgot', { method: 'POST', body: { account: values.account } })
-              setMessage(t('forgotSent'))
-              return
+      <div className="flex items-center justify-center bg-paper px-5 py-12">
+        <form
+          className="card w-full max-w-md space-y-4 p-6 sm:p-8"
+          onSubmit={form.handleSubmit(async (values) => {
+            setMessage('')
+            try {
+              if (forgot) {
+                await api('/api/auth/forgot', { method: 'POST', body: { account: values.account } })
+                setMessage(t('forgotSent'))
+                return
+              }
+              await api('/api/auth/login', { method: 'POST', body: values })
+              window.location.href = '/'
+            } catch (error) {
+              setMessage(error instanceof ApiError ? error.code : t('error'))
             }
-            await api('/api/auth/login', { method: 'POST', body: values })
-            window.location.href = '/'
-          } catch (error) {
-            setMessage(error instanceof ApiError ? error.code : t('error'))
-          }
-        })}
-      >
-        <img src="/brand/program-mark.png" alt="" className="h-16 w-16 lg:hidden" />
-        <h1 className="text-2xl font-semibold">{t('login')}</h1>
-        <label className="text-sm">
-          {t('account')}
-          <input className="mt-1 w-full rounded-xl border px-3 py-2" {...form.register('account')} />
-        </label>
-        {!forgot && (
-          <label className="text-sm">
-            {t('password')}
-            <input className="mt-1 w-full rounded-xl border px-3 py-2" type="password" {...form.register('password')} />
+          })}
+        >
+          <img src="/brand/program-mark.png" alt="" className="h-14 w-14 rounded-xl bg-white object-contain p-1 ring-1 ring-line lg:hidden" />
+          <div>
+            <p className="text-xs font-semibold tracking-wide text-teal lg:hidden">國立臺中科技大學</p>
+            <h1 className="text-2xl font-bold tracking-tight text-ink">{t('login')}</h1>
+            <p className="mt-1 text-sm text-muted">{t('program')}</p>
+          </div>
+          <label className="block text-sm font-medium text-ink">
+            {t('account')}
+            <input className="field w-full" {...form.register('account')} />
           </label>
-        )}
-        {!forgot && (
-          <label className="text-sm">
-            {t('totp')}
-            <input className="mt-1 w-full rounded-xl border px-3 py-2" inputMode="numeric" {...form.register('totp')} />
-            <span className="text-xs text-stone-500">{t('totpHint')}</span>
-          </label>
-        )}
-        {message && <p className="text-sm text-rose-700">{message}</p>}
-        <button className="rounded-xl bg-teal px-4 py-2 text-white" type="submit">
-          {forgot ? t('forgot') : t('login')}
-        </button>
-        <button className="text-sm underline" type="button" onClick={() => setForgot(!forgot)}>
-          {t('forgot')}
-        </button>
-      </form>
+          {!forgot && (
+            <label className="block text-sm font-medium text-ink">
+              {t('password')}
+              <input className="field w-full" type="password" {...form.register('password')} />
+            </label>
+          )}
+          {!forgot && (
+            <label className="block text-sm font-medium text-ink">
+              {t('totp')}
+              <input className="field w-full" inputMode="numeric" {...form.register('totp')} />
+              <span className="mt-1 block text-xs font-normal text-muted">{t('totpHint')}</span>
+            </label>
+          )}
+          {message && <p className="rounded-xl bg-[#fdeceb] px-3 py-2 text-sm font-medium text-[#9b1c16]">{message}</p>}
+          <button className="btn btn-primary w-full" type="submit">
+            {forgot ? t('forgot') : t('login')}
+          </button>
+          <button className="text-sm font-medium text-teal underline-offset-2 hover:underline" type="button" onClick={() => setForgot(!forgot)}>
+            {t('forgot')}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
 
 function PasswordPage() {
   const { t } = useI18n()
-  const navigate = useNavigate()
   const schema = z.object({ currentPassword: z.string().min(1), nextPassword: z.string().min(12) })
   const form = useForm({ resolver: zodResolver(schema) })
   return (
-    <form
-      className="mx-auto max-w-md space-y-3 py-16"
-      onSubmit={form.handleSubmit(async (values) => {
-        await api('/api/auth/password', { method: 'POST', body: values })
-        window.location.href = '/'
-      })}
-    >
-      <h1 className="text-2xl font-semibold">{t('changePassword')}</h1>
-      <p className="text-sm text-stone-600">{t('passwordRule')}</p>
-      <input className="w-full rounded-xl border px-3 py-2" type="password" placeholder={t('currentPassword')} {...form.register('currentPassword')} />
-      <input className="w-full rounded-xl border px-3 py-2" type="password" placeholder={t('nextPassword')} {...form.register('nextPassword')} />
-      <button className="rounded-xl bg-ink px-4 py-2 text-white" type="submit">
-        {t('save')}
-      </button>
-    </form>
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-16">
+      <form
+        className="card w-full max-w-md space-y-4 p-6 sm:p-8"
+        onSubmit={form.handleSubmit(async (values) => {
+          await api('/api/auth/password', { method: 'POST', body: values })
+          window.location.href = '/'
+        })}
+      >
+        <img src="/brand/program-mark.png" alt="" className="h-12 w-12 rounded-xl object-contain" />
+        <h1 className="text-2xl font-bold tracking-tight">{t('changePassword')}</h1>
+        <p className="text-sm text-muted">{t('passwordRule')}</p>
+        <input className="field w-full" type="password" placeholder={t('currentPassword')} {...form.register('currentPassword')} />
+        <input className="field w-full" type="password" placeholder={t('nextPassword')} {...form.register('nextPassword')} />
+        <button className="btn btn-primary w-full" type="submit">
+          {t('save')}
+        </button>
+      </form>
+    </div>
   )
 }
 
@@ -117,67 +127,68 @@ function ResetPage() {
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
   return (
-    <form
-      className="mx-auto max-w-md space-y-3 py-16"
-      onSubmit={async (event) => {
-        event.preventDefault()
-        try {
-          await api('/api/auth/reset', { method: 'POST', body: { token, password } })
-          navigate('/login')
-        } catch (error) {
-          setMessage(error instanceof ApiError ? error.code : t('error'))
-        }
-      }}
-    >
-      <h1 className="text-2xl font-semibold">{t('changePassword')}</h1>
-      <input className="w-full rounded-xl border px-3 py-2" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
-      {message && <p className="text-sm text-rose-700">{message}</p>}
-      <button className="rounded-xl bg-ink px-4 py-2 text-white" type="submit">
-        {t('save')}
-      </button>
-    </form>
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-16">
+      <form
+        className="card w-full max-w-md space-y-4 p-6 sm:p-8"
+        onSubmit={async (event) => {
+          event.preventDefault()
+          try {
+            await api('/api/auth/reset', { method: 'POST', body: { token, password } })
+            navigate('/login')
+          } catch (error) {
+            setMessage(error instanceof ApiError ? error.code : t('error'))
+          }
+        }}
+      >
+        <img src="/brand/program-mark.png" alt="" className="h-12 w-12 rounded-xl object-contain" />
+        <h1 className="text-2xl font-bold tracking-tight">{t('changePassword')}</h1>
+        <input className="field w-full" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+        {message && <p className="rounded-xl bg-[#fdeceb] px-3 py-2 text-sm font-medium text-[#9b1c16]">{message}</p>}
+        <button className="btn btn-primary w-full" type="submit">
+          {t('save')}
+        </button>
+      </form>
+    </div>
   )
 }
 
 function TotpPage() {
   const { t } = useI18n()
-  const navigate = useNavigate()
   const [secret, setSecret] = useState('')
   const [token, setToken] = useState('')
   useEffect(() => {
     api<{ secret: string }>('/api/auth/totp/setup', { method: 'POST', body: {} }).then((data) => setSecret(data.secret))
   }, [])
   return (
-    <form
-      className="mx-auto max-w-md space-y-3 py-16"
-      onSubmit={async (event) => {
-        event.preventDefault()
-        await api('/api/auth/totp/enable', { method: 'POST', body: { token } })
-        window.location.href = '/'
-      }}
-    >
-      <h1 className="text-2xl font-semibold">{t('setupTotp')}</h1>
-      <p className="break-all rounded-xl bg-stone-100 p-3 font-mono text-sm">{secret}</p>
-      <input className="w-full rounded-xl border px-3 py-2" value={token} onChange={(event) => setToken(event.target.value)} />
-      <button className="rounded-xl bg-ink px-4 py-2 text-white" type="submit">
-        {t('save')}
-      </button>
-    </form>
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4 py-16">
+      <form
+        className="card w-full max-w-md space-y-4 p-6 sm:p-8"
+        onSubmit={async (event) => {
+          event.preventDefault()
+          await api('/api/auth/totp/enable', { method: 'POST', body: { token } })
+          window.location.href = '/'
+        }}
+      >
+        <img src="/brand/program-mark.png" alt="" className="h-12 w-12 rounded-xl object-contain" />
+        <h1 className="text-2xl font-bold tracking-tight">{t('setupTotp')}</h1>
+        <p className="break-all rounded-xl bg-[#eef5f1] p-3 font-mono text-sm text-ink">{secret}</p>
+        <input className="field w-full" value={token} onChange={(event) => setToken(event.target.value)} />
+        <button className="btn btn-primary w-full" type="submit">
+          {t('save')}
+        </button>
+      </form>
+    </div>
   )
 }
 
 function Gate() {
-  const { setLocale } = useI18n()
+  const { setLocale, t } = useI18n()
   const query = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/auth/me'), retry: false })
   const user = query.data?.user
   useEffect(() => {
-    const saved = localStorage.getItem('theme')
-    if (saved === 'dark') document.documentElement.classList.add('dark')
-  }, [])
-  useEffect(() => {
     if (user?.locale === 'en' || user?.locale === 'zh-Hant') setLocale(user.locale)
   }, [user?.locale, setLocale])
-  if (query.isLoading) return <p className="p-8">…</p>
+  if (query.isLoading) return <p className="p-8 text-sm text-muted">{t('loading')}</p>
   if (query.isError || !query.data || !user) return <LoginPage />
   if (user.mustChangePassword) return <PasswordPage />
   if (user.role === 'ADMIN' && !user.totpEnabled) return <TotpPage />

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { DocumentPreview } from '../components/preview'
-import { StatusPill } from '../components/shell'
+import { EmptyState, StatusPill } from '../components/shell'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 
@@ -27,36 +27,36 @@ export function TeacherHome() {
     queryKey: ['roster', atRisk],
     queryFn: () => api<{ students: Row[] }>(`/api/teacher/students${atRisk ? '?atRisk=1' : ''}`),
   })
-  if (!query.data) return <p>{t('loading')}</p>
+  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
   return (
     <div className="space-y-4">
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={atRisk} onChange={(event) => setAtRisk(event.target.checked)} />
+      <label className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium shadow-sm ring-1 ring-line">
+        <input className="h-4 w-4 accent-teal" type="checkbox" checked={atRisk} onChange={(event) => setAtRisk(event.target.checked)} />
         {t('atRisk')}
       </label>
-      <div className="overflow-auto rounded-2xl border border-line bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="bg-stone-100 dark:bg-zinc-800">
+      <div className="card overflow-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="px-3 py-2">{t('account')}</th>
-              <th className="px-3 py-2">{locale === 'en' ? 'Name' : '姓名'}</th>
-              <th className="px-3 py-2">{t('overview')}</th>
-              <th className="px-3 py-2">{t('earned')}</th>
+              <th>{t('account')}</th>
+              <th>{locale === 'en' ? 'Name' : '姓名'}</th>
+              <th>{t('overview')}</th>
+              <th>{t('earned')}</th>
             </tr>
           </thead>
           <tbody>
             {query.data.students.map((student) => (
-              <tr key={student.id} className="border-t border-line dark:border-zinc-800">
-                <td className="px-3 py-2">
-                  <Link className="underline" to={`/teacher/${student.id}`}>
+              <tr key={student.id}>
+                <td>
+                  <Link className="font-semibold text-teal underline-offset-2 hover:underline" to={`/teacher/${student.id}`}>
                     {student.account}
                   </Link>
                 </td>
-                <td className="px-3 py-2">{locale === 'en' ? student.nameEn : student.nameZh}</td>
-                <td className="px-3 py-2">
-                  <StatusPill state={student.verdict} /> {student.atRisk && <span className="ml-1 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-900">{t('atRisk')}</span>}
+                <td>{locale === 'en' ? student.nameEn : student.nameZh}</td>
+                <td>
+                  <StatusPill state={student.verdict} /> {student.atRisk && <span className="ml-1 inline-flex rounded-full bg-[#fdeceb] px-2 py-1 text-xs font-semibold text-[#9b1c16]">{t('atRisk')}</span>}
                 </td>
-                <td className="px-3 py-2">
+                <td className="tabular-nums">
                   {student.earnedTowardTotal}
                   {student.requiredTotal != null ? ` / ${student.requiredTotal}` : ''}
                 </td>
@@ -65,7 +65,7 @@ export function TeacherHome() {
           </tbody>
         </table>
       </div>
-      {query.data.students.length === 0 && <p>{t('empty')}</p>}
+      {query.data.students.length === 0 && <EmptyState>{t('empty')}</EmptyState>}
     </div>
   )
 }
@@ -86,31 +86,31 @@ export function TeacherStudent() {
         comments: { id: string; body: string; createdAt: string }[]
       }>(`/api/teacher/students/${id}`),
   })
-  if (!query.data) return <p>{t('loading')}</p>
+  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
   const student = query.data.student
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+    <div className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{locale === 'en' ? student.nameEn : student.nameZh}</h1>
-          <p className="text-sm text-stone-500">{student.account}</p>
-          <div className="mt-2">
+        <div className="card p-5">
+          <p className="text-sm text-muted">{student.account}</p>
+          <h1 className="text-2xl font-bold tracking-tight">{locale === 'en' ? student.nameEn : student.nameZh}</h1>
+          <div className="mt-3">
             <StatusPill state={query.data.progress.verdict} />
           </div>
-          <p className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">{t('reminderHint')}</p>
+          <p className="mt-4 rounded-xl bg-[#fff4dc] px-3 py-2 text-sm leading-6 text-[#7a4e00]">{t('reminderHint')}</p>
         </div>
         {query.data.submissions.map((submission) => (
-          <article key={submission.id} className="rounded-2xl border border-line bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex justify-between gap-2">
-              <h2 className="font-medium">{locale === 'en' ? submission.threshold?.nameEn : submission.threshold?.nameZh}</h2>
+          <article key={submission.id} className="card p-4">
+            <div className="flex flex-wrap justify-between gap-2">
+              <h2 className="font-semibold">{locale === 'en' ? submission.threshold?.nameEn : submission.threshold?.nameZh}</h2>
               <StatusPill state={submission.status === 'APPROVED' ? 'passed' : submission.status === 'PENDING' ? 'under_review' : 'missing'} />
             </div>
-            <p className="text-sm">
+            <p className="text-sm text-muted">
               {t('score')}: {submission.scoreText || '—'} · {new Date(submission.createdAt).toLocaleDateString()}
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {submission.files.map((file) => (
-                <button key={file.id} className="rounded-lg border px-2 py-1 text-sm" type="button" onClick={() => setPreview(file.id)}>
+                <button key={file.id} className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPreview(file.id)}>
                   {file.originalName}
                 </button>
               ))}
@@ -118,7 +118,7 @@ export function TeacherStudent() {
           </article>
         ))}
         <form
-          className="space-y-2"
+          className="card space-y-3 p-4"
           onSubmit={async (event) => {
             event.preventDefault()
             await api(`/api/teacher/students/${id}/comments`, { method: 'POST', body: { body } })
@@ -126,18 +126,18 @@ export function TeacherStudent() {
             await client.invalidateQueries({ queryKey: ['teacher-student', id] })
           }}
         >
-          <textarea className="w-full rounded-2xl border px-3 py-2 dark:bg-zinc-950" value={body} onChange={(event) => setBody(event.target.value)} placeholder={t('reminder')} />
-          <button className="rounded-xl bg-ink px-4 py-2 text-white" type="submit">
+          <textarea className="field w-full" value={body} onChange={(event) => setBody(event.target.value)} placeholder={t('reminder')} />
+          <button className="btn btn-ink" type="submit">
             {t('reminder')}
           </button>
         </form>
         {query.data.comments.map((comment) => (
-          <p key={comment.id} className="rounded-2xl bg-stone-100 px-3 py-2 text-sm dark:bg-zinc-800">
+          <p key={comment.id} className="rounded-2xl bg-[#eef5f1] px-4 py-3 text-sm leading-6">
             {comment.body}
           </p>
         ))}
       </div>
-      <div>{preview ? <DocumentPreview fileId={preview} /> : <p className="text-sm text-stone-500">{t('preview')}</p>}</div>
+      <div>{preview ? <DocumentPreview fileId={preview} /> : <EmptyState>{t('preview')}</EmptyState>}</div>
     </div>
   )
 }

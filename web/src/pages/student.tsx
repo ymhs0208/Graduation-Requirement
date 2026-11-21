@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { DocumentPreview } from '../components/preview'
-import { Ring, StatusPill } from '../components/shell'
+import { EmptyState, Ring, StatusPill } from '../components/shell'
 
 type Dashboard = {
   profile: { nameZh: string; nameEn: string; cohortYear: number; classNameZh: string; classNameEn: string; onboardingCompleted: boolean; account: string }
@@ -37,30 +37,38 @@ type Submission = {
   files: { id: string; originalName: string }[]
 }
 
+const thresholdAccent: Record<string, string> = {
+  passed: 'border-l-[#0e7a45]',
+  under_review: 'border-l-[#d0891f]',
+  missing: 'border-l-[#c24134]',
+  unpublished: 'border-l-[#3b82b6]',
+  info: 'border-l-[#b7c4be]',
+}
+
 export function StudentHome() {
   const { t, locale } = useI18n()
   const query = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dashboard>('/api/me/dashboard') })
   const client = useQueryClient()
   const [step, setStep] = useState(0)
-  if (query.isLoading) return <p>{t('loading')}</p>
-  if (query.isError || !query.data) return <p>{t('error')}</p>
+  if (query.isLoading) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isError || !query.data) return <p className="text-sm text-[#9b1c16]">{t('error')}</p>
   const { profile, progress } = query.data
   const ratio = progress.requiredTotal ? progress.earnedTowardTotal / progress.requiredTotal : 0
   const steps = [t('onboarding1'), t('onboarding2'), t('onboarding3'), t('onboarding4')]
   return (
     <div className="space-y-6">
       {!profile.onboardingCompleted && (
-        <div className="rounded-3xl border border-teal/30 bg-white p-5 shadow-sm dark:bg-zinc-900">
-          <p className="text-sm text-teal">{step + 1} / 4</p>
-          <p className="mt-2 text-lg">{steps[step]}</p>
-          <div className="mt-4 flex gap-2">
+        <div className="card border-teal/30 p-5 sm:p-6">
+          <p className="text-sm font-semibold text-teal">{step + 1} / 4</p>
+          <p className="mt-2 text-lg leading-8">{steps[step]}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
             {step < 3 ? (
-              <button className="rounded-xl bg-ink px-4 py-2 text-white" type="button" onClick={() => setStep(step + 1)}>
+              <button className="btn btn-ink" type="button" onClick={() => setStep(step + 1)}>
                 {t('next')}
               </button>
             ) : (
               <button
-                className="rounded-xl bg-teal px-4 py-2 text-white"
+                className="btn btn-primary"
                 type="button"
                 onClick={async () => {
                   await api('/api/me/onboarding', { method: 'POST', body: {} })
@@ -71,7 +79,7 @@ export function StudentHome() {
               </button>
             )}
             <button
-              className="rounded-xl border px-4 py-2"
+              className="btn btn-ghost"
               type="button"
               onClick={async () => {
                 await api('/api/me/onboarding', { method: 'POST', body: {} })
@@ -83,60 +91,64 @@ export function StudentHome() {
           </div>
         </div>
       )}
-      <section className="grid gap-4 rounded-3xl bg-white p-5 shadow-sm md:grid-cols-[auto_1fr] dark:bg-zinc-900">
+      <section className="card grid gap-5 p-5 sm:p-6 md:grid-cols-[auto_1fr] md:items-center">
         <Ring value={ratio} label={progress.requiredTotal ? `${progress.earnedTowardTotal}/${progress.requiredTotal}` : '—'} />
         <div>
-          <p className="text-sm text-stone-500">
+          <p className="text-sm text-muted">
             {profile.account} · {locale === 'en' ? profile.classNameEn : profile.classNameZh} · {profile.cohortYear}
           </p>
-          <h1 className="mt-1 text-2xl font-semibold">{locale === 'en' ? profile.nameEn : profile.nameZh}</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">{locale === 'en' ? profile.nameEn : profile.nameZh}</h1>
           <div className="mt-3 flex flex-wrap gap-2">
             <StatusPill state={progress.verdict} />
-            {progress.atRisk && <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-900">{t('atRisk')}</span>}
-            {progress.delayed && <span className="rounded-full bg-stone-800 px-2.5 py-1 text-xs text-white">{t('delayed')}</span>}
+            {progress.atRisk && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fdeceb] px-2.5 py-1 text-xs font-semibold text-[#9b1c16] ring-1 ring-[#f4c7c2]">{t('atRisk')}</span>}
+            {progress.delayed && <span className="inline-flex rounded-full bg-pine px-2.5 py-1 text-xs font-semibold text-white">{t('delayed')}</span>}
           </div>
-          <ul className="mt-4 space-y-1 text-sm">
-            {progress.missing.map((item) => (
-              <li key={item.nameZh}>· {locale === 'en' ? item.nameEn : item.nameZh}</li>
-            ))}
-            {progress.office.map((item) => (
-              <li key={item.nameZh} className="text-sky-800 dark:text-sky-200">
-                · {locale === 'en' ? item.nameEn : item.nameZh}（{t('placeholder')}）
-              </li>
-            ))}
-          </ul>
+          {(progress.missing.length > 0 || progress.office.length > 0) && (
+            <ul className="mt-4 space-y-1.5 rounded-xl bg-[#f7faf8] px-3 py-3 text-sm">
+              {progress.missing.map((item) => (
+                <li key={item.nameZh}>· {locale === 'en' ? item.nameEn : item.nameZh}</li>
+              ))}
+              {progress.office.map((item) => (
+                <li key={item.nameZh} className="text-[#0f5f8a]">
+                  · {locale === 'en' ? item.nameEn : item.nameZh}（{t('placeholder')}）
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </section>
       <section className="grid gap-3 md:grid-cols-2">
-        {progress.categories.map((category) => (
-          <article key={category.code} className="rounded-2xl border border-line bg-card p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-medium">{locale === 'en' ? category.nameEn : category.nameZh}</h2>
-              {category.isPlaceholder ? <StatusPill state="unpublished" /> : <StatusPill state={category.met ? 'passed' : 'missing'} />}
-            </div>
-            <p className="mt-2 text-2xl font-semibold">
-              {category.earned}
-              <span className="text-base font-normal text-stone-500"> / {category.requiredCredits ?? '—'}</span>
-            </p>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-200 dark:bg-zinc-700">
-              <div
-                className="h-full bg-teal"
-                style={{ width: `${Math.min(100, category.requiredCredits ? (category.earned / category.requiredCredits) * 100 : 0)}%` }}
-              />
-            </div>
-            <p className="mt-2 text-xs text-stone-500">{locale === 'en' ? category.noteEn : category.noteZh}</p>
-          </article>
-        ))}
+        {progress.categories.map((category) => {
+          const width = Math.min(100, category.requiredCredits ? (category.earned / category.requiredCredits) * 100 : 0)
+          return (
+            <article key={category.code} className="card p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="font-semibold">{locale === 'en' ? category.nameEn : category.nameZh}</h2>
+                {category.isPlaceholder ? <StatusPill state="unpublished" /> : <StatusPill state={category.met ? 'passed' : 'missing'} />}
+              </div>
+              <p className="mt-3 text-2xl font-bold tracking-tight">
+                {category.earned}
+                <span className="text-base font-medium text-muted"> / {category.requiredCredits ?? '—'}</span>
+              </p>
+              <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#e4eee9]">
+                <div className={`h-full rounded-full ${category.met ? 'bg-[#0e7a45]' : 'bg-teal'}`} style={{ width: `${width}%` }} />
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted">{locale === 'en' ? category.noteEn : category.noteZh}</p>
+            </article>
+          )
+        })}
       </section>
       <section className="space-y-2">
         {progress.thresholds.map((threshold) => (
-          <article key={threshold.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-            <div>
-              <h2 className="font-medium">{locale === 'en' ? threshold.nameEn : threshold.nameZh}</h2>
-              <p className="text-sm text-stone-500">{locale === 'en' ? threshold.descriptionEn : threshold.descriptionZh}</p>
-              {threshold.overdue && <p className="text-sm text-rose-700">{t('atRisk')}</p>}
+          <article key={threshold.id} className={`card flex flex-col gap-3 border-l-4 px-4 py-4 sm:flex-row sm:items-start sm:justify-between ${thresholdAccent[threshold.state] ?? 'border-l-[#b7c4be]'}`}>
+            <div className="min-w-0">
+              <h2 className="font-semibold">{locale === 'en' ? threshold.nameEn : threshold.nameZh}</h2>
+              <p className="text-sm text-muted">{locale === 'en' ? threshold.descriptionEn : threshold.descriptionZh}</p>
+              {threshold.overdue && <p className="text-sm font-medium text-[#9b1c16]">{t('atRisk')}</p>}
             </div>
-            <StatusPill state={threshold.state} />
+            <div className="shrink-0">
+              <StatusPill state={threshold.state} />
+            </div>
           </article>
         ))}
       </section>
@@ -150,31 +162,37 @@ export function PlanPage() {
     queryKey: ['plan'],
     queryFn: () => api<{ items: { id: string; studyYear: number; nameZh: string; nameEn: string; moduleZh: string; moduleEn: string; requirementType: string; sourceNoteZh: string; sourceNoteEn: string }[]; progress: Progress }>('/api/me/plan'),
   })
-  if (query.isLoading) return <p>{t('loading')}</p>
-  if (!query.data) return <p>{t('error')}</p>
+  if (query.isLoading) return <p className="text-sm text-muted">{t('loading')}</p>
+  if (!query.data) return <p className="text-sm text-[#9b1c16]">{t('error')}</p>
   const years = [1, 2, 3, 4]
   return (
     <div className="space-y-6">
-      <p className="text-sm text-stone-600 dark:text-stone-300">{locale === 'en' ? query.data.items[0]?.sourceNoteEn : query.data.items[0]?.sourceNoteZh}</p>
-      {years.map((year) => (
-        <section key={year}>
-          <h2 className="mb-2 text-lg font-semibold">
-            {locale === 'en' ? `Year ${year}` : `${'一二三四'[year - 1]}年級`}
-            {query.data?.progress.studyYear === year ? ' · ' : ''}
-          </h2>
-          <div className="grid gap-2 md:grid-cols-2">
-            {query.data?.items
-              .filter((item) => item.studyYear === year)
-              .map((item) => (
-                <article key={item.id} className="rounded-2xl border border-line bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-                  <p className="text-xs text-stone-500">{locale === 'en' ? item.moduleEn : item.moduleZh}</p>
-                  <p className="font-medium">{locale === 'en' ? item.nameEn : item.nameZh}</p>
-                  <p className="text-xs">{item.requirementType === 'MAJOR_ELECTIVE' ? (locale === 'en' ? 'Elective' : '選修') : locale === 'en' ? 'Required' : '必修'} · {t('placeholder')}</p>
-                </article>
-              ))}
-          </div>
-        </section>
-      ))}
+      <p className="text-sm leading-6 text-muted">{locale === 'en' ? query.data.items[0]?.sourceNoteEn : query.data.items[0]?.sourceNoteZh}</p>
+      {years.map((year) => {
+        const items = query.data?.items.filter((item) => item.studyYear === year) ?? []
+        return (
+          <section key={year}>
+            <h2 className="mb-3 flex items-center gap-2 text-lg font-bold tracking-tight">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-pine text-sm text-white">{locale === 'en' ? year : '一二三四'[year - 1]}</span>
+              {locale === 'en' ? `Year ${year}` : `${'一二三四'[year - 1]}年級`}
+              {query.data?.progress.studyYear === year ? ' · ' : ''}
+            </h2>
+            {items.length === 0 ? (
+              <EmptyState>{t('empty')}</EmptyState>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2">
+                {items.map((item) => (
+                  <article key={item.id} className="card px-4 py-3">
+                    <p className="text-xs font-medium text-teal">{locale === 'en' ? item.moduleEn : item.moduleZh}</p>
+                    <p className="font-semibold">{locale === 'en' ? item.nameEn : item.nameZh}</p>
+                    <p className="text-xs text-muted">{item.requirementType === 'MAJOR_ELECTIVE' ? (locale === 'en' ? 'Elective' : '選修') : locale === 'en' ? 'Required' : '必修'} · {t('placeholder')}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      })}
     </div>
   )
 }
@@ -190,14 +208,14 @@ export function EvidencePage() {
   const [file, setFile] = useState<File | null>(null)
   const [message, setMessage] = useState('')
   const [preview, setPreview] = useState('')
-  if (!query.data) return <p>{t('loading')}</p>
+  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
   const thresholds = query.data.progress.thresholds.filter((item) => item.state !== 'info')
   const selected = thresholds.find((item) => item.id === thresholdId) ?? thresholds[0]
   const items = query.data.recognized.filter((item) => !selected || item.type === selected.code || (selected.code === 'ENGLISH' && item.type === 'ENGLISH'))
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <form
-        className="space-y-3 rounded-3xl bg-white p-5 shadow-sm dark:bg-zinc-900"
+        className="card space-y-4 p-5 sm:p-6"
         onSubmit={async (event) => {
           event.preventDefault()
           if (!file || !selected) return
@@ -217,10 +235,10 @@ export function EvidencePage() {
           }
         }}
       >
-        <h1 className="text-xl font-semibold">{t('upload')}</h1>
-        <label className="block text-sm">
+        <h1 className="text-xl font-bold tracking-tight">{t('upload')}</h1>
+        <label className="block text-sm font-medium">
           {t('evidence')}
-          <select className="mt-1 w-full rounded-xl border px-3 py-2 dark:bg-zinc-950" value={selected?.id ?? ''} onChange={(event) => setThresholdId(event.target.value)}>
+          <select className="field w-full" value={selected?.id ?? ''} onChange={(event) => setThresholdId(event.target.value)}>
             {thresholds.map((item) => (
               <option key={item.id} value={item.id}>
                 {locale === 'en' ? item.nameEn : item.nameZh}
@@ -229,9 +247,9 @@ export function EvidencePage() {
           </select>
         </label>
         {items.length > 0 && (
-          <label className="block text-sm">
+          <label className="block text-sm font-medium">
             {t('recognized')}
-            <select className="mt-1 w-full rounded-xl border px-3 py-2 dark:bg-zinc-950" value={itemId} onChange={(event) => setItemId(event.target.value)} required>
+            <select className="field w-full" value={itemId} onChange={(event) => setItemId(event.target.value)} required>
               <option value="">—</option>
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -242,44 +260,45 @@ export function EvidencePage() {
             </select>
           </label>
         )}
-        <label className="block text-sm">
+        <label className="block text-sm font-medium">
           {t('score')}
-          <input className="mt-1 w-full rounded-xl border px-3 py-2 dark:bg-zinc-950" value={score} onChange={(event) => setScore(event.target.value)} />
+          <input className="field w-full" value={score} onChange={(event) => setScore(event.target.value)} />
         </label>
-        <label className="block text-sm">
+        <label className="block text-sm font-medium">
           {t('note')}
-          <input className="mt-1 w-full rounded-xl border px-3 py-2 dark:bg-zinc-950" value={note} onChange={(event) => setNote(event.target.value)} />
+          <input className="field w-full" value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
         <label
-          className="block rounded-2xl border border-dashed border-stone-400 px-4 py-8 text-center text-sm"
+          className="dropzone"
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
             event.preventDefault()
             setFile(event.dataTransfer.files[0] ?? null)
           }}
         >
-          {file ? file.name : t('drop')}
-          <input className="mt-2 block w-full" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+          <span className="block font-medium text-ink">{file ? file.name : t('drop')}</span>
+          <input className="sr-only" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
         </label>
-        {message && <p className="text-sm text-rose-700">{message}</p>}
-        <button className="rounded-xl bg-teal px-4 py-2 text-white" type="submit">
+        {message && <p className="text-sm font-medium text-[#9b1c16]">{message}</p>}
+        <button className="btn btn-primary" type="submit">
           {t('submit')}
         </button>
       </form>
       <div className="space-y-3">
+        {query.data.submissions.length === 0 && <EmptyState>{t('empty')}</EmptyState>}
         {query.data.submissions.map((submission) => (
-          <article key={submission.id} className="rounded-2xl border border-line bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-medium">{locale === 'en' ? submission.threshold?.nameEn : submission.threshold?.nameZh}</h2>
+          <article key={submission.id} className="card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">{locale === 'en' ? submission.threshold?.nameEn : submission.threshold?.nameZh}</h2>
               <StatusPill state={submission.status === 'APPROVED' ? 'passed' : submission.status === 'REJECTED' ? 'missing' : 'under_review'} />
             </div>
-            <p className="text-sm text-stone-500">
+            <p className="text-sm text-muted">
               {submission.scoreText} · {new Date(submission.createdAt).toLocaleDateString()}
             </p>
             {submission.reviewComment && <p className="mt-2 text-sm">{submission.reviewComment}</p>}
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {submission.files.map((file) => (
-                <button key={file.id} className="rounded-lg border px-2 py-1 text-sm" type="button" onClick={() => setPreview(file.id)}>
+                <button key={file.id} className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPreview(file.id)}>
                   {file.originalName}
                 </button>
               ))}
@@ -298,14 +317,14 @@ export function NotificationsPage() {
     queryKey: ['notes'],
     queryFn: () => api<{ notifications: { id: string; titleZh: string; titleEn: string; bodyZh: string; bodyEn: string; readAt: string | null; createdAt: string }[] }>('/api/inbox'),
   })
-  if (!query.data) return <p>{t('loading')}</p>
+  if (!query.data) return <p className="text-sm text-muted">{t('loading')}</p>
   return (
     <div className="space-y-3">
-      {query.data.notifications.length === 0 && <p>{t('empty')}</p>}
+      {query.data.notifications.length === 0 && <EmptyState>{t('empty')}</EmptyState>}
       {query.data.notifications.map((item) => (
-        <article key={item.id} className="rounded-2xl bg-white p-4 dark:bg-zinc-900">
-          <h2 className="font-medium">{locale === 'en' ? item.titleEn : item.titleZh}</h2>
-          <p className="mt-1 whitespace-pre-wrap text-sm">{locale === 'en' ? item.bodyEn : item.bodyZh}</p>
+        <article key={item.id} className={`card p-4 ${item.readAt ? '' : 'border-l-4 border-l-teal'}`}>
+          <h2 className="font-semibold">{locale === 'en' ? item.titleEn : item.titleZh}</h2>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-ink">{locale === 'en' ? item.bodyEn : item.bodyZh}</p>
         </article>
       ))}
     </div>

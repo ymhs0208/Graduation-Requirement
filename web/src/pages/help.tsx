@@ -50,12 +50,14 @@ export function HelpPage({ role }: { role: SessionUser['role'] }) {
   useQuery({ queryKey: ['me-help'], queryFn: () => api('/api/auth/me') })
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">{t('help')}</h1>
-      <p className="text-stone-600 dark:text-stone-300">{t('helpLead')}</p>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">{t('help')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('helpLead')}</p>
+      </div>
       {questions.map(([question, answer]) => (
-        <article key={question} className="rounded-2xl bg-white p-4 dark:bg-zinc-900">
-          <h2 className="font-medium">{question}</h2>
-          <p className="mt-1 text-sm leading-6">{answer}</p>
+        <article key={question} className="card p-5">
+          <h2 className="font-semibold text-pine">{question}</h2>
+          <p className="mt-2 text-sm leading-7 text-ink">{answer}</p>
         </article>
       ))}
     </div>

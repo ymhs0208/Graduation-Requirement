@@ -24,9 +24,8 @@ await page.waitForSelector('text=林可芯')
 await page.screenshot({ path: `${out}/student-zh-light.png`, fullPage: true })
 
 await page.getByRole('button', { name: 'English' }).click()
-await page.getByRole('button', { name: 'Theme' }).click()
 await page.waitForTimeout(300)
-await page.screenshot({ path: `${out}/student-en-dark.png`, fullPage: true })
+await page.screenshot({ path: `${out}/student-en-light.png`, fullPage: true })
 
 await page.context().clearCookies()
 await login(page, 'T1001', 'Teach#Nutc2026')

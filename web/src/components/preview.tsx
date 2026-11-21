@@ -69,33 +69,33 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
   }, [pdf, page, zoom])
 
   return (
-    <div className="flex min-h-[420px] flex-col rounded-2xl border border-line bg-stone-100 dark:border-zinc-700 dark:bg-zinc-950">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-sm dark:border-zinc-700">
-        <span className="font-medium">{t('preview')}</span>
-        <button className="rounded-lg border px-2 py-1" type="button" onClick={() => setZoom((value) => Math.max(0.6, value - 0.2))}>
+    <div className="card flex min-h-[420px] flex-col overflow-hidden bg-[#f7faf8]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-white px-3 py-2.5 text-sm">
+        <span className="mr-1 font-semibold text-ink">{t('preview')}</span>
+        <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setZoom((value) => Math.max(0.6, value - 0.2))}>
           {t('zoomOut')}
         </button>
-        <button className="rounded-lg border px-2 py-1" type="button" onClick={() => setZoom((value) => Math.min(2.4, value + 0.2))}>
+        <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setZoom((value) => Math.min(2.4, value + 0.2))}>
           {t('zoomIn')}
         </button>
         {pdf && (
           <>
-            <button className="rounded-lg border px-2 py-1" type="button" onClick={() => setPage((value) => Math.max(1, value - 1))}>
+            <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPage((value) => Math.max(1, value - 1))}>
               {t('prevPage')}
             </button>
-            <span>
+            <span className="tabular-nums text-muted">
               {page} / {pages}
             </span>
-            <button className="rounded-lg border px-2 py-1" type="button" onClick={() => setPage((value) => Math.min(pages, value + 1))}>
+            <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPage((value) => Math.min(pages, value + 1))}>
               {t('nextPage')}
             </button>
           </>
         )}
       </div>
       <div className="flex-1 overflow-auto p-4">
-        {error && <p className="text-rose-700">{t('error')}</p>}
-        {image && <img alt="" src={image} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="bg-white shadow" />}
-        <canvas ref={canvasRef} className={pdf ? 'bg-white shadow' : 'hidden'} />
+        {error && <p className="text-sm font-medium text-[#9b1c16]">{t('error')}</p>}
+        {image && <img alt="" src={image} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="rounded-lg bg-white shadow-md" />}
+        <canvas ref={canvasRef} className={pdf ? 'rounded-lg bg-white shadow-md' : 'hidden'} />
       </div>
     </div>
   )

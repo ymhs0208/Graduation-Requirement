@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
@@ -46,23 +46,26 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
   const navigate = useNavigate()
   const name = locale === 'en' ? user.nameEn : user.nameZh
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[240px_1fr]">
-      <aside className="border-b border-line bg-ink text-stone-100 md:min-h-screen md:border-b-0 dark:border-zinc-800">
-        <div className="flex items-center gap-3 px-4 py-4">
-          <img src="/brand/program-mark.png" alt="" className="h-10 w-10 rounded-lg bg-white object-contain p-1" />
-          <div>
-            <p className="text-sm font-semibold">{t('app')}</p>
-            <p className="text-xs text-stone-300">{t('program')}</p>
+    <div className="min-h-screen md:grid md:grid-cols-[272px_1fr]">
+      <aside className="bg-pine text-white md:min-h-screen">
+        <div className="h-1 bg-gold" />
+        <div className="flex items-center gap-3 px-4 py-4 md:px-5 md:py-5">
+          <img src="/brand/program-mark.png" alt="" className="h-11 w-11 shrink-0 rounded-xl bg-white object-contain p-1 shadow-sm" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold tracking-wide">{t('app')}</p>
+            <p className="text-[11px] leading-snug text-emerald-50/75">{t('program')}</p>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-auto px-2 pb-3 md:block md:px-3">
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:block md:space-y-1 md:overflow-visible md:px-3 md:pb-6">
           {links[user.role].map(([to, key]) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/' || to === '/admin' || to === '/teacher'}
               className={({ isActive }) =>
-                `block whitespace-nowrap rounded-xl px-3 py-2 text-sm ${isActive ? 'bg-white text-ink' : 'text-stone-200 hover:bg-white/10'}`
+                `block whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                  isActive ? 'bg-white text-pine shadow-sm' : 'text-emerald-50/90 hover:bg-white/10'
+                }`
               }
             >
               {t(key)}
@@ -70,13 +73,13 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
           ))}
         </nav>
       </aside>
-      <div>
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-card px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-          <img src="/brand/program-wordmark.png" alt={t('program')} className="h-10 max-w-[240px] object-contain object-left dark:invert" />
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium">{name}</span>
+      <div className="min-w-0">
+        <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
+          <img src="/brand/program-wordmark.png" alt={t('program')} className="hidden h-14 max-w-[320px] object-contain object-left md:block" />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="max-w-[12rem] truncate rounded-full bg-[#eef5f1] px-3 py-1 text-sm font-medium text-ink">{name}</span>
             <button
-              className="rounded-lg border border-line px-3 py-1.5 dark:border-zinc-700"
+              className="btn btn-ghost"
               type="button"
               onClick={() => {
                 const next = locale === 'en' ? 'zh-Hant' : 'en'
@@ -87,17 +90,7 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
               {t('language')}
             </button>
             <button
-              className="rounded-lg border border-line px-3 py-1.5 dark:border-zinc-700"
-              type="button"
-              onClick={() => {
-                document.documentElement.classList.toggle('dark')
-                localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light')
-              }}
-            >
-              {t('theme')}
-            </button>
-            <button
-              className="rounded-lg bg-ink px-3 py-1.5 text-white dark:bg-stone-100 dark:text-ink"
+              className="btn btn-ink"
               type="button"
               onClick={async () => {
                 await api('/api/auth/logout', { method: 'POST', body: {} })
@@ -108,42 +101,71 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
             </button>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       </div>
     </div>
   )
+}
+
+const pillTone: Record<string, [string, 'passed' | 'underReview' | 'missing' | 'unpublished' | 'info' | 'canGraduate' | 'blocked' | 'pending' | 'office']> = {
+  passed: ['bg-[#e7f6ee] text-[#08663a] ring-[#b7e4cc]', 'passed'],
+  under_review: ['bg-[#fff4dc] text-[#7a4e00] ring-[#f0d7a2]', 'underReview'],
+  missing: ['bg-[#fdeceb] text-[#9b1c16] ring-[#f4c7c2]', 'missing'],
+  unpublished: ['bg-[#e7f3fa] text-[#0f5f8a] ring-[#c5dff0]', 'unpublished'],
+  info: ['bg-[#f3f5f4] text-[#3f514c] ring-[#d5deda]', 'info'],
+  ready: ['bg-[#e7f6ee] text-[#08663a] ring-[#b7e4cc]', 'canGraduate'],
+  blocked: ['bg-[#fdeceb] text-[#9b1c16] ring-[#f4c7c2]', 'blocked'],
+  pending_review: ['bg-[#fff4dc] text-[#7a4e00] ring-[#f0d7a2]', 'pending'],
+  needs_office: ['bg-[#e7f3fa] text-[#0f5f8a] ring-[#c5dff0]', 'office'],
 }
 
 export function StatusPill({ state }: { state: string }) {
   const { t } = useI18n()
-  const map: Record<string, [string, 'passed' | 'underReview' | 'missing' | 'unpublished' | 'info' | 'canGraduate' | 'blocked' | 'pending' | 'office']> = {
-    passed: ['bg-emerald-100 text-emerald-900', 'passed'],
-    under_review: ['bg-amber-100 text-amber-950', 'underReview'],
-    missing: ['bg-rose-100 text-rose-900', 'missing'],
-    unpublished: ['bg-sky-100 text-sky-950', 'unpublished'],
-    info: ['bg-stone-200 text-stone-800', 'info'],
-    ready: ['bg-emerald-100 text-emerald-900', 'canGraduate'],
-    blocked: ['bg-rose-100 text-rose-900', 'blocked'],
-    pending_review: ['bg-amber-100 text-amber-950', 'pending'],
-    needs_office: ['bg-sky-100 text-sky-950', 'office'],
-  }
-  const [color, key] = map[state] ?? ['bg-stone-200', 'info']
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${color}`}>{t(key)}</span>
+  const [color, key] = pillTone[state] ?? ['bg-[#f3f5f4] text-[#3f514c] ring-[#d5deda]', 'info']
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${color}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+      {t(key)}
+    </span>
+  )
 }
 
 export function Ring({ value, label }: { value: number; label: string }) {
-  const radius = 42
+  const radius = 40
   const length = 2 * Math.PI * radius
-  const offset = length * (1 - Math.max(0, Math.min(1, value)))
+  const clamped = Math.max(0, Math.min(1, value))
+  const offset = length * (1 - clamped)
+  const gradientId = useId().replace(/:/g, '')
   return (
-    <div className="relative h-28 w-28">
-      <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90">
-        <circle cx="50" cy="50" r={radius} className="stroke-stone-200 dark:stroke-zinc-700" strokeWidth="8" fill="none" />
-        <circle cx="50" cy="50" r={radius} stroke="#1f6f6a" strokeWidth="8" fill="none" strokeDasharray={length} strokeDashoffset={offset} strokeLinecap="round" />
+    <div className="relative grid h-[8.5rem] w-[8.5rem] shrink-0 place-items-center">
+      <svg viewBox="0 0 100 100" className="h-[8.5rem] w-[8.5rem] -rotate-90">
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#1aa37a" />
+            <stop offset="100%" stopColor="#0e6b56" />
+          </linearGradient>
+        </defs>
+        <circle cx="50" cy="50" r={radius} stroke="#e3eee8" strokeWidth="9" fill="none" />
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          stroke={`url(#${gradientId})`}
+          strokeWidth="9"
+          fill="none"
+          strokeDasharray={length}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
       </svg>
-      <div className="absolute inset-0 grid place-items-center text-center text-xs font-medium">
-        <span>{label}</span>
+      <div className="absolute px-3 text-center">
+        <p className="text-sm font-bold leading-tight text-ink">{label}</p>
+        <p className="text-[11px] font-medium text-muted">{Math.round(clamped * 100)}%</p>
       </div>
     </div>
   )
+}
+
+export function EmptyState({ children }: { children: ReactNode }) {
+  return <p className="empty">{children}</p>
 }
