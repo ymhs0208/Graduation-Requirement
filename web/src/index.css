@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@import "@fontsource/noto-sans-tc/400.css";
+@import "@fontsource/noto-sans-tc/500.css";
+@import "@fontsource/noto-sans-tc/700.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --color-ink: #323031;
+  --color-paper: #f4f1ec;
+  --color-card: #fffcf8;
+  --color-line: #e6dfd6;
+  --color-teal: #1f6f6a;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.dark body {
+  background: #141414;
+  color: #f5f5f4;
+}

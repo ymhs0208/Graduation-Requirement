@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+server/var
+certs
+*.log
+playwright-report
+test-results
+coverage
+.DS_Store

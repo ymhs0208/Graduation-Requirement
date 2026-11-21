@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gradtrack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: gradtrack
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gradtrack -d gradtrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: ./server
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://gradtrack:${POSTGRES_PASSWORD:-change-me}@db:5432/gradtrack
+      UPLOAD_DIR: /data/uploads
+      NODE_ENV: production
+      COOKIE_SECURE: "true"
+      PORT: 43124
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CAMPUS_CIDR: ${CAMPUS_CIDR:-all}
+    volumes:
+      - ./certs:/etc/nginx/certs
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
