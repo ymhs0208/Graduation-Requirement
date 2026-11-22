@@ -1,23 +1,26 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, FileUp, Search, ShieldCheck, UserPlus, UserRoundX, UsersRound } from 'lucide-react'
+import { ArrowLeft, FileUp, GraduationCap, Presentation, Search, ShieldCheck, UserRoundX, UsersRound } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
 import { LoadError, PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
-import { api, errorMessage } from '../lib/api'
+import { ApiError, api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { ImportPanel } from './import-panel'
 
 const roles = { STUDENT: 'studentRole', TEACHER: 'teacherRole', ADMIN: 'adminRole' } as const
-const patterns = { STUDENT: /^B\d{8}$/, TEACHER: /^T\d{4}$/, ADMIN: /^A\d{4}$/ }
-const examples = { STUDENT: 'B11523001', TEACHER: 'T1001', ADMIN: 'A0001' }
+const accountTypes = {
+  STUDENT: { title: 'createStudentAccount', label: 'directoryStudentId', invalid: 'directoryBadStudentId', example: 'B11523001', pattern: /^B\d{8}$/, Icon: GraduationCap },
+  TEACHER: { title: 'createTeacherAccount', label: 'directoryTeacherId', invalid: 'directoryBadTeacherId', example: 'T1001', pattern: /^T\d{4}$/, Icon: Presentation },
+  ADMIN: { title: 'createAdminAccount', label: 'account', invalid: 'directoryBadAdminId', example: 'A0001', pattern: /^A\d{4}$/, Icon: ShieldCheck },
+} as const
 type Role = keyof typeof roles
 type User = {
   id: string; account: string; nameZh: string; nameEn: string; role: Role; status: 'ACTIVE' | 'DEACTIVATED'; anonymized: boolean
   cohortYear: number | null; classNameZh: string
 }
 type Class = { id: string; cohortYear: number; nameZh: string; nameEn: string }
-const emptyForm = { account: '', nameZh: '', nameEn: '', email: '', role: 'STUDENT' as Role, cohortYear: '', classId: '' }
+const emptyForm = { account: '', nameZh: '', nameEn: '', email: '', cohortYear: '', classId: '' }
 const pageSize = 20
 
 export function AdminUsers() {
@@ -26,7 +29,7 @@ export function AdminUsers() {
   const { busy, run } = useLock()
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['users'], queryFn: () => api<{ users: User[]; classes?: Class[] }>('/api/admin/users') })
-  const [mode, setMode] = useState<'list' | 'create' | 'import'>('list')
+  const [mode, setMode] = useState<'list' | 'import' | Role>('list')
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<Role | ''>('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DEACTIVATED' | 'ANONYMIZED'>('ALL')
@@ -40,7 +43,10 @@ export function AdminUsers() {
   const directoryHeading = useRef<HTMLHeadingElement>(null)
   const backButton = useRef<HTMLButtonElement>(null)
   const createdMessage = useRef<HTMLDivElement>(null)
-  useUnsaved(Boolean(form.account || form.nameZh || form.nameEn || form.email || form.cohortYear || form.classId))
+  const createRole = mode === 'list' || mode === 'import' ? null : mode
+  const accountType = createRole && accountTypes[createRole]
+  const dirty = Object.values(form).some(Boolean)
+  useUnsaved(dirty)
 
   const term = search.trim().toLowerCase()
   const directory = query.data?.users ?? []
@@ -58,27 +64,36 @@ export function AdminUsers() {
   const cohortYear = Number(form.cohortYear)
   const classes = (query.data?.classes ?? []).filter((item) => item.cohortYear === cohortYear)
   const errors = {
-    account: patterns[form.role].test(form.account.trim()) ? '' : `${t('badAccount')} ${t('example')} ${examples[form.role]}`,
+    account: accountType && !accountType.pattern.test(form.account.trim()) ? t(accountType.invalid) : '',
     nameZh: form.nameZh.trim() ? '' : t('formRequired'),
     nameEn: form.nameEn.trim() ? '' : t('formRequired'),
     email: /^[^\s@]+@nutc\.edu\.tw$/i.test(form.email.trim()) ? '' : t('badEmail'),
-    cohortYear: form.role !== 'STUDENT' || (Number.isInteger(cohortYear) && cohortYear >= 100 && cohortYear <= 200) ? '' : t('badCohort'),
+    cohortYear: createRole !== 'STUDENT' || (Number.isInteger(cohortYear) && cohortYear >= 100 && cohortYear <= 200) ? '' : t('badCohort'),
   }
   const fields = [
-    ['account', 'account', examples[form.role], 40],
+    ['account', accountType?.label ?? 'account', accountType?.example ?? '', 20],
     ['nameZh', 'nameZhLabel', '', 40],
     ['nameEn', 'nameEnLabel', '', 80],
     ['email', 'emailLabel', 'name@nutc.edu.tw', 120],
-    ...(form.role === 'STUDENT' ? [['cohortYear', 'cohort', '115', 3] as const] : []),
+    ...(createRole === 'STUDENT' ? [['cohortYear', 'cohort', '115', 3] as const] : []),
   ] as const
 
   function open(next: typeof mode) {
     setMode(next)
     requestAnimationFrame(() => {
       if (next === 'list') directoryHeading.current?.focus()
-      else if (next === 'create') panelHeading.current?.focus()
-      else backButton.current?.focus()
+      else if (next === 'import') backButton.current?.focus()
+      else panelHeading.current?.focus()
     })
+  }
+
+  async function returnToList() {
+    if (dirty && !await confirm({ title: t('ruleDiscard'), body: t('unsaved'), confirm: t('ruleDiscard'), danger: true })) return
+    setForm(emptyForm)
+    setAttempted(false)
+    setMessage('')
+    setCreated(null)
+    open('list')
   }
 
   function resetFilters() {
@@ -110,7 +125,11 @@ export function AdminUsers() {
             <h2 ref={directoryHeading} tabIndex={-1} className="section-title">{t('accountList')}</h2>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-ghost" onClick={() => open('import')}><FileUp size={17} aria-hidden />{t('importTitle')}</button>
-              <button type="button" className="btn btn-primary" onClick={() => open('create')}><UserPlus size={17} aria-hidden />{t('createAccount')}</button>
+              {(Object.entries(accountTypes) as [Role, (typeof accountTypes)[Role]][]).map(([role, { title, Icon }]) => (
+                <button key={role} type="button" className={`btn ${role === 'ADMIN' ? 'btn-ghost' : 'btn-primary'}`} onClick={() => open(role)}>
+                  <Icon size={17} aria-hidden />{t(title)}
+                </button>
+              ))}
             </div>
           </div>
           <div className="account-filters directory-filters">
@@ -187,9 +206,9 @@ export function AdminUsers() {
           </footer>}
         </>}
       </section>
-      {mode !== 'list' && <button ref={backButton} type="button" className="btn btn-ghost" disabled={busy} onClick={() => open('list')}><ArrowLeft size={16} aria-hidden />{t('directoryBack')}</button>}
-      <section id="accounts-create" hidden={mode !== 'create'} className="card p-4 sm:p-6">
-        <h2 ref={panelHeading} tabIndex={-1} className="section-title">{t('createAccount')}</h2>
+      {mode !== 'list' && <button ref={backButton} type="button" className="btn btn-ghost" disabled={busy} onClick={() => void returnToList()}><ArrowLeft size={16} aria-hidden />{t('directoryBack')}</button>}
+      {createRole && accountType && <section className="card p-4 sm:p-6" aria-labelledby="accounts-create-title">
+        <h2 id="accounts-create-title" ref={panelHeading} tabIndex={-1} className="section-title">{t(accountType.title)}</h2>
         <p className="mt-1 text-sm text-muted">{t('createAccountHint')}</p>
         {created && <div ref={createdMessage} tabIndex={-1} className="inset-panel mt-4" role="status">
           <p className="font-bold">{t('accountCreated')} {created.account}</p>
@@ -206,12 +225,14 @@ export function AdminUsers() {
           }
           void run(async () => {
             const account = form.account.trim()
+            setCreated(null)
             try {
-              const result = await api<{ tempPassword?: string }>('/api/admin/users', {
+              const result = await api<{ id?: string; tempPassword?: string }>('/api/admin/users', {
                 method: 'POST',
-                body: { ...form, account, email: form.email.trim(), cohortYear: form.role === 'STUDENT' ? cohortYear : undefined, classId: form.role === 'STUDENT' ? form.classId || undefined : undefined },
+                body: { ...form, role: createRole, account, email: form.email.trim(), cohortYear: createRole === 'STUDENT' ? cohortYear : undefined, classId: createRole === 'STUDENT' ? form.classId || undefined : undefined },
                 silent: true,
               })
+              if (typeof result.id !== 'string' || !result.id.trim()) throw new ApiError('SERVER')
               setCreated({ account, tempPassword: result.tempPassword })
               setForm(emptyForm)
               setAttempted(false)
@@ -223,12 +244,6 @@ export function AdminUsers() {
           })
         }}>
           <fieldset className="space-y-4" disabled={busy}>
-          <label className="block max-w-xs text-sm font-semibold">
-            {t('roleLabel')}
-            <select className="field w-full" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as Role, classId: '' })}>
-              {(Object.keys(roles) as Role[]).map((role) => <option key={role} value={role}>{t(roles[role])}</option>)}
-            </select>
-          </label>
           <div className="grid gap-4 sm:grid-cols-2">
             {fields.map(([key, label, placeholder, maxLength]) => {
               const error = attempted && errors[key]
@@ -243,7 +258,7 @@ export function AdminUsers() {
                 </div>
               )
             })}
-            {form.role === 'STUDENT' && classes.length > 0 && <label className="block text-sm font-semibold">{t('directoryClassOptional')}
+            {createRole === 'STUDENT' && classes.length > 0 && <label className="block text-sm font-semibold">{t('directoryClassOptional')}
               <select className="field w-full" value={form.classId} onChange={(event) => setForm({ ...form, classId: event.target.value })}>
                 <option value="">{t('directoryNoClass')}</option>
                 {classes.map((item) => <option key={item.id} value={item.id}>{locale === 'en' ? item.nameEn || item.nameZh : item.nameZh}</option>)}
@@ -252,9 +267,9 @@ export function AdminUsers() {
           </div>
           </fieldset>
           {message && <p className="login-result" role="alert">{message}</p>}
-          <PendingButton type="submit" className="btn btn-primary" pending={busy}>{t('createAccount')}</PendingButton>
+          <PendingButton type="submit" className="btn btn-primary" pending={busy}>{t(accountType.title)}</PendingButton>
         </form>
-      </section>
+      </section>}
       <div id="accounts-import" hidden={mode !== 'import'}><ImportPanel /></div>
     </div>
   )
