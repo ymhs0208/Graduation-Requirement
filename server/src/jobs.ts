@@ -121,6 +121,8 @@ export async function anonymizeUser(userId: string, actorId: string | null) {
   await prisma.comment.deleteMany({ where: { studentId: userId } })
   await prisma.notification.deleteMany({ where: { userId } })
   await prisma.session.deleteMany({ where: { userId } })
+  await prisma.adminPasskey.deleteMany({ where: { userId } })
+  await prisma.passkeyChallenge.deleteMany({ where: { userId } })
   await prisma.passwordReset.deleteMany({ where: { userId } })
   await prisma.emailLog.deleteMany({ where: { to: user.email } })
   const anonAccount = `anon${user.id.slice(-10)}`

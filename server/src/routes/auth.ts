@@ -18,8 +18,10 @@ import {
 import { HttpError } from '../errors'
 import { asyncHandler, cookieOptions, requireUser, type AuthedRequest } from '../http'
 import { sendMail } from '../mail'
+import { messages } from '../messages'
 import { publicUser } from '../progress'
 import { env, isTest } from '../env'
+import passkeys, { beginPasskeyLogin, hasPasskeys, passkeyLogin, verifyPasskeyLogin } from './passkeys'
 
 const router = Router()
 
@@ -36,6 +38,18 @@ const loginLimiter = rateLimit({
 
 const schoolEmail = z.string().trim().email().refine((value) => value.toLowerCase().endsWith('@nutc.edu.tw'), 'school-email')
 
+async function failLogin(user: { id: string; failedLoginCount: number }, code: string): Promise<never> {
+  const fails = user.failedLoginCount + 1
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      failedLoginCount: { increment: 1 },
+      ...(fails >= 5 ? { lockedUntil: new Date(Date.now() + 15 * 60 * 1000) } : {}),
+    },
+  })
+  throw new HttpError(401, code)
+}
+
 router.post(
   '/login',
   loginLimiter,
@@ -45,6 +59,7 @@ router.post(
         account: z.string().trim().min(1).max(40),
         password: z.string().min(1).max(200),
         totp: z.string().optional(),
+        passkey: passkeyLogin.optional(),
       })
       .parse(req.body)
     const user = await prisma.user.findUnique({ where: { account: body.account } })
@@ -52,29 +67,22 @@ router.post(
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) throw new HttpError(423, 'LOCKED')
     if (user.status !== 'ACTIVE' || user.anonymizedAt) throw new HttpError(403, 'DEACTIVATED')
     const ok = await verifyPassword(user.passwordHash, body.password)
-    if (!ok) {
-      const fails = user.failedLoginCount + 1
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          failedLoginCount: fails,
-          lockedUntil: fails >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
-        },
-      })
-      throw new HttpError(401, 'INVALID_CREDENTIALS')
-    }
-    if (user.totpEnabled) {
-      if (!body.totp) throw new HttpError(401, 'TOTP_REQUIRED')
+    if (!ok) await failLogin(user, 'INVALID_CREDENTIALS')
+    if (body.passkey) {
+      if (user.role !== 'ADMIN' || !user.totpEnabled) throw new HttpError(403, 'FORBIDDEN')
+      if (body.passkey.action === 'start') {
+        res.setHeader('Cache-Control', 'no-store')
+        return res.json(await beginPasskeyLogin(req, user.id))
+      }
+      if (!await verifyPasskeyLogin(req, user.id, body.passkey)) await failLogin(user, 'PASSKEY_INVALID')
+    } else if (user.totpEnabled) {
+      if (!body.totp) {
+        const passkeyAvailable = user.role === 'ADMIN' && await hasPasskeys(req, user.id)
+        const { zh: messageZh, en: messageEn } = messages.TOTP_REQUIRED
+        return res.status(401).json({ error: 'TOTP_REQUIRED', messageZh, messageEn, passkeyAvailable })
+      }
       if (!user.totpSecret || !verifyTotp(user.totpSecret, body.totp)) {
-        const fails = user.failedLoginCount + 1
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            failedLoginCount: fails,
-            lockedUntil: fails >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
-          },
-        })
-        throw new HttpError(401, 'TOTP_INVALID')
+        await failLogin(user, 'TOTP_INVALID')
       }
     }
     await prisma.session.deleteMany({ where: { userId: user.id } })
@@ -95,6 +103,8 @@ router.post(
     res.json({ user: publicUser(user), csrfToken: csrf })
   }),
 )
+
+router.use('/passkeys', passkeys)
 
 router.post(
   '/logout',
@@ -204,8 +214,12 @@ router.post(
   asyncHandler(async (req: AuthedRequest, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.userId } })
     if (!user || user.role !== 'ADMIN') throw new HttpError(403, 'FORBIDDEN')
-    const secret = newTotpSecret()
-    await prisma.user.update({ where: { id: user.id }, data: { totpSecret: secret, totpEnabled: false } })
+    if (user.totpEnabled) throw new HttpError(409, 'TOTP_ALREADY_ENABLED')
+    const secret = user.totpSecret ?? newTotpSecret()
+    if (!user.totpSecret) {
+      const updated = await prisma.user.updateMany({ where: { id: user.id, totpEnabled: false, totpSecret: null }, data: { totpSecret: secret } })
+      if (updated.count !== 1) throw new HttpError(409, 'TOTP_SETUP_RETRY')
+    }
     res.json({ secret, uri: totpUri(secret, user.account), sample: currentTotp(secret) })
   }),
 )

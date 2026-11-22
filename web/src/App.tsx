@@ -10,6 +10,7 @@ import { ConnectionBanner, LoadError, PageSkeleton, PendingButton, RouteProgress
 import { Toaster } from 'sonner'
 import { Shell, SiteFooter, SkipLink, type SessionUser } from './components/shell'
 import { ApiError, errorMessage, api, onSessionLost } from './lib/api'
+import { authenticatePasskey, passkeyError, supportsPasskeys } from './lib/passkeys'
 import { I18nProvider, useI18n } from './lib/i18n'
 import { AdminAudit, AdminReviews, AdminStats } from './pages/admin'
 import { AdminRetention } from './pages/admin-retention'
@@ -23,6 +24,7 @@ import { NotificationsPage, PlanPage, StudentHome } from './pages/student'
 import { EvidencePage } from './pages/student-evidence'
 import { TeacherHome } from './pages/teacher'
 import { TeacherStudent } from './pages/teacher-student'
+import { AdminPasskeys } from './pages/admin-passkeys'
 
 const client = new QueryClient()
 
@@ -50,7 +52,8 @@ function LoginPage() {
   const [pending, setPending] = useState(false)
   const [forgot, setForgot] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [verification, setVerification] = useState<{ account: string; password: string } | null>(null)
+  const [verification, setVerification] = useState<{ account: string; password: string; canUsePasskey: boolean } | null>(null)
+  const [verificationMethod, setVerificationMethod] = useState<'totp' | 'passkey'>('totp')
   const [code, setCode] = useState('')
   const schema = z.object({
     account: z.string().min(4),
@@ -99,14 +102,19 @@ function LoginPage() {
                   setMessage('')
                   setPending(true)
                   try {
-                    await api('/api/auth/login', {
-                      method: 'POST',
-                      body: { ...verification, totp: code },
-                      silent: true,
-                    })
+                    if (verificationMethod === 'passkey') {
+                      await authenticatePasskey(verification.account, verification.password)
+                    } else {
+                      await api('/api/auth/login', {
+                        body: { account: verification.account, password: verification.password, totp: code },
+                        silent: true,
+                      })
+                    }
                     window.location.replace(loginDestination(loginState?.returnTo))
                   } catch (error) {
-                    setMessage(errorMessage(error, locale, t('error')))
+                    setMessage(verificationMethod === 'passkey'
+                      ? passkeyError(error, locale, t('passkeyTryAgain'), t('passkeyInterrupted'))
+                      : errorMessage(error, locale, t('error')))
                   } finally {
                     setPending(false)
                   }
@@ -114,9 +122,21 @@ function LoginPage() {
               >
                 <div className="login-intro">
                   <h1>{t('loginVerification')}</h1>
-                  <p id="login-totp-hint">{t('totpHint')}</p>
+                  <p>{verification.account}</p>
                 </div>
-                <div className="login-control">
+                {verification.canUsePasskey && (
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('verificationMethod')}>
+                    {(['totp', 'passkey'] as const).map((method) => (
+                      <button type="button" key={method}
+                        className={`btn ${method === verificationMethod ? 'btn-ink' : 'btn-ghost'}`}
+                        disabled={pending} aria-pressed={method === verificationMethod}
+                        onClick={() => { setVerificationMethod(method); setCode(''); setMessage('') }}>
+                        {t(method === 'totp' ? 'authenticatorApp' : 'passkey')}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {verificationMethod === 'totp' ? <div className="login-control">
                   <label htmlFor="login-totp">{t('totp')}</label>
                   <div className="login-input">
                     <input
@@ -132,7 +152,8 @@ function LoginPage() {
                       autoFocus
                     />
                   </div>
-                </div>
+                  <p id="login-totp-hint" className="mt-2 text-sm text-muted">{t('totpHint')}</p>
+                </div> : <p className="text-sm text-muted">{t('passkeySignInHint')}</p>}
                 {message && <p className="login-result" role="alert">{message}</p>}
                 <PendingButton className="btn btn-primary login-submit" type="submit" pending={pending}>{t('verifyAndSignIn')}</PendingButton>
                 <button className="login-recovery" type="button" disabled={pending} onClick={() => {
@@ -163,7 +184,8 @@ function LoginPage() {
                     window.location.replace(loginDestination(loginState?.returnTo))
                   } catch (error) {
                     if (!forgot && values.password && error instanceof ApiError && error.code === 'TOTP_REQUIRED') {
-                      setVerification({ account: values.account, password: values.password })
+                      setVerification({ account: values.account, password: values.password, canUsePasskey: error.passkeyAvailable && supportsPasskeys() })
+                      setVerificationMethod('totp')
                       setShowPassword(false)
                       form.resetField('password')
                       return
@@ -411,6 +433,7 @@ function Gate() {
         <Route path="/admin/recognized" element={user.role === 'ADMIN' ? <AdminRecognized /> : <Navigate to={home} replace />} />
         <Route path="/admin/audit" element={user.role === 'ADMIN' ? <AdminAudit /> : <Navigate to={home} replace />} />
         <Route path="/admin/retention" element={user.role === 'ADMIN' ? <AdminRetention /> : <Navigate to={home} replace />} />
+        <Route path="/admin/security" element={user.role === 'ADMIN' ? <AdminPasskeys /> : <Navigate to={home} replace />} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Routes>
     </Shell>

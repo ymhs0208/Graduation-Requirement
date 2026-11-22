@@ -4,7 +4,7 @@ import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { PendingLabel } from './feedback'
-import { Bell, BookOpen, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, CircleHelp, ClipboardCheck, Clock, FileUp, Globe2, History, Info, LayoutDashboard, LogOut, Megaphone, Minus, Shield, Trash2, UsersRound } from 'lucide-react'
+import { Bell, BookOpen, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, CircleHelp, ClipboardCheck, Clock, FileUp, Globe2, History, Info, KeyRound, LayoutDashboard, LogOut, Megaphone, Minus, Shield, Trash2, UsersRound } from 'lucide-react'
 
 export type SessionUser = {
   id: string
@@ -49,10 +49,10 @@ const links = {
 const navIcons = {
   overview: LayoutDashboard, plan: CalendarDays, evidence: FileUp, notifications: Bell,
   help: CircleHelp, classes: UsersRound, stats: ChartNoAxesColumnIncreasing, reviews: ClipboardCheck,
-  users: UsersRound, rules: BookOpen, managePlan: CalendarDays, recognized: Shield, announcements: Megaphone, audit: History, retention: Trash2,
+  users: UsersRound, rules: BookOpen, managePlan: CalendarDays, recognized: Shield, announcements: Megaphone, audit: History, retention: Trash2, passkeySettings: KeyRound,
 }
 
-const pageTitles = [...links.STUDENT, ...links.TEACHER, ...links.ADMIN]
+const pageTitles = [...links.STUDENT, ...links.TEACHER, ...links.ADMIN, ['/admin/security', 'passkeySettings'] as const]
 const roleLabels = { STUDENT: 'studentRole', TEACHER: 'teacherRole', ADMIN: 'adminRole' } as const
 
 export function SkipLink() {
@@ -115,6 +115,11 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
                     </span>
                   </DropdownMenu.Label>
                   <DropdownMenu.Separator className="workspace-account-separator" />
+                  {user.role === 'ADMIN' && (
+                    <DropdownMenu.Item className="workspace-account-item" onSelect={() => navigate('/admin/security')}>
+                      <KeyRound size={16} aria-hidden />{t('passkeySettings')}
+                    </DropdownMenu.Item>
+                  )}
                   <DropdownMenu.Item className="workspace-account-item" disabled={Boolean(pending)} onSelect={() => {
                     const next = locale === 'en' ? 'zh-Hant' : 'en'
                     setPending('locale')

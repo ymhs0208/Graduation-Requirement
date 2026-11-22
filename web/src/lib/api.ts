@@ -54,11 +54,13 @@ export class ApiError extends Error {
   code: string
   messageZh?: string
   messageEn?: string
-  constructor(code: string, messageZh?: string, messageEn?: string) {
+  passkeyAvailable: boolean
+  constructor(code: string, messageZh?: string, messageEn?: string, passkeyAvailable = false) {
     super(code)
     this.code = code
     this.messageZh = messageZh
     this.messageEn = messageEn
+    this.passkeyAvailable = passkeyAvailable
   }
 }
 
@@ -216,6 +218,7 @@ function parsePayload<T>(text: string, status: number): T {
       typeof payload.error === 'string' ? payload.error : fallback,
       typeof payload.messageZh === 'string' ? payload.messageZh : undefined,
       typeof payload.messageEn === 'string' ? payload.messageEn : undefined,
+      payload.passkeyAvailable === true,
     )
   }
   if (typeof payload.csrfToken === 'string') setCsrf(payload.csrfToken)

@@ -25,6 +25,30 @@ describe('authorization', () => {
     await seed()
   })
 
+  it('requires a second factor for an enrolled admin and protects passkey settings', async () => {
+    const credentials = { account: 'A0001', password: DEMO_PASSWORD.admin }
+    const passwordOnly = await request(app).post('/api/auth/login').send(credentials)
+    expect(passwordOnly.status).toBe(401)
+    expect(passwordOnly.body.error).toBe('TOTP_REQUIRED')
+    expect(passwordOnly.headers['set-cookie']).toBeUndefined()
+
+    const student = await login('B11023008', DEMO_PASSWORD.student)
+    expect((await student.agent.get('/api/auth/passkeys')).status).toBe(403)
+    const attempted = await request(app).post('/api/auth/login').send({
+      account: 'B11023008',
+      password: DEMO_PASSWORD.student,
+      passkey: { action: 'start' },
+    })
+    expect(attempted.status).toBe(403)
+    expect(attempted.headers['set-cookie']).toBeUndefined()
+
+    const admin = await login(credentials.account, credentials.password, currentTotp(DEMO_ADMIN_TOTP))
+    const setup = await admin.agent.post('/api/auth/totp/setup').set('x-csrf-token', admin.csrf).send({})
+    expect(setup.status).toBe(409)
+    expect(setup.body.secret).toBeUndefined()
+    expect((await admin.agent.get('/api/auth/passkeys')).status).toBe(200)
+  })
+
   it('rejects a non-image upload and a cross-student file read', async () => {
     expect(sniff(Buffer.from('not a file'))).toBeNull()
     expect(sniff(png)?.mime).toBe('image/png')
