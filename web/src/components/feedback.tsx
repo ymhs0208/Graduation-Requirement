@@ -110,6 +110,7 @@ export function RouteProgress() {
       const anchor = (event.target as HTMLElement | null)?.closest('a')
       const href = anchor?.getAttribute('href') ?? ''
       if (!href.startsWith('/') || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      if (anchor?.origin !== window.location.origin || anchor.pathname === window.location.pathname) return
       running.current = true
       setVisible(true)
       setWidth(18)

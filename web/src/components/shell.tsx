@@ -1,10 +1,10 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { PendingLabel } from './feedback'
-import { Bell, BookOpen, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, CircleHelp, ClipboardCheck, Clock, FileUp, Globe2, History, Info, KeyRound, LayoutDashboard, LogOut, Megaphone, Minus, Shield, Trash2, UsersRound } from 'lucide-react'
+import { Bell, BookOpen, CalendarDays, ChartNoAxesColumnIncreasing, Check, ChevronDown, CircleHelp, ClipboardCheck, Clock, FileUp, Globe2, History, Info, KeyRound, LayoutDashboard, LogOut, Megaphone, Menu, Minus, Shield, Trash2, UserRound, UsersRound, X } from 'lucide-react'
 
 export type SessionUser = {
   id: string
@@ -83,93 +83,118 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [pending, setPending] = useState('')
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
+  const navigationButton = useRef<HTMLButtonElement>(null)
+  const main = useRef<HTMLElement>(null)
+  const navigationId = useId()
   const name = (locale === 'en' ? user.nameEn : user.nameZh)?.trim() || user.account
   const initial = Array.from(name)[0]
   const studentDetail = matchPath('/teacher/:id', pathname)
   const page = pageTitles.find(([path]) => matchPath(path, pathname))?.[1] ?? (studentDetail ? 'classes' : 'overview')
   const PageIcon = navIcons[page]
+  const home = links[user.role][0][0]
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="workspace-shell flex min-h-screen flex-col">
       <SkipLink />
-      <div className="workspace-layout">
-      <aside className="app-sidebar" aria-label={t('nav')}>
-        <div className="workspace-brand">
-          <img src="/brand/university-seal.jpg" alt="" width="42" height="42" />
-          <div className="min-w-0">
-            <p>{t('loginHeroTitle')}</p>
-            <p>{t('university')}</p>
-          </div>
+      <header className="workspace-header">
+        <div className="workspace-header-inner">
+          <button ref={navigationButton} className="workspace-nav-toggle" type="button" aria-label={t('nav')}
+            aria-expanded={mobileNavigationOpen} aria-controls={navigationId}
+            onClick={() => setMobileNavigationOpen((open) => !open)}>
+            {mobileNavigationOpen ? <X size={22} aria-hidden /> : <Menu size={22} aria-hidden />}
+          </button>
+          <NavLink className="workspace-brand" to={home} end onClick={() => setMobileNavigationOpen(false)}>
+            <img src="/brand/university-seal.jpg" alt="" width="48" height="48" />
+            <span className="min-w-0">
+              <span className="workspace-brand-title">{t('loginHeroTitle')}</span>
+              <span className="workspace-brand-university">{t('university')}</span>
+            </span>
+          </NavLink>
           <DropdownMenu.Root modal={false}>
-            <DropdownMenu.Trigger className="workspace-account-trigger" aria-label={t('accountMenu')} title={t('accountMenu')}>
-              <span className="workspace-avatar" aria-hidden="true">{initial}</span>
+            <DropdownMenu.Trigger className="workspace-account-trigger" aria-label={`${name} ${t(roleLabels[user.role])} ${t('accountMenu')}`} title={t('accountMenu')}>
+              <span className="workspace-avatar" aria-hidden="true"><UserRound size={17} /></span>
+              <span className="workspace-account-copy" aria-hidden="true">
+                <span>{name}</span>
+                <span>{t(roleLabels[user.role])}</span>
+              </span>
               <ChevronDown size={14} aria-hidden />
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <div role="region" aria-label={t('accountMenu')}>
-                <DropdownMenu.Content className="workspace-account-menu" align="end" sideOffset={8} collisionPadding={10}>
-                  <DropdownMenu.Label className="workspace-identity">
-                    <span className="workspace-avatar" aria-hidden="true">{initial}</span>
-                    <span className="min-w-0">
-                      <span className="block break-words text-sm font-bold">{name}</span>
-                      <span className="block text-xs text-muted">{t(roleLabels[user.role])}</span>
-                    </span>
-                  </DropdownMenu.Label>
-                  <DropdownMenu.Separator className="workspace-account-separator" />
-                  {user.role === 'ADMIN' && (
-                    <DropdownMenu.Item className="workspace-account-item" onSelect={() => navigate('/admin/security')}>
-                      <KeyRound size={16} aria-hidden />{t('passkeySettings')}
-                    </DropdownMenu.Item>
-                  )}
-                  <DropdownMenu.Item className="workspace-account-item" disabled={Boolean(pending)} onSelect={() => {
-                    const next = locale === 'en' ? 'zh-Hant' : 'en'
-                    setPending('locale')
-                    void onLocale(next).catch(() => undefined).finally(() => setPending(''))
-                  }}>
-                    <PendingLabel pending={pending === 'locale'}><Globe2 size={16} aria-hidden />{t('language')}</PendingLabel>
+              <DropdownMenu.Content className="workspace-account-menu" aria-label={t('accountMenu')} align="end" sideOffset={8} collisionPadding={10}>
+                <DropdownMenu.Label className="workspace-identity">
+                  <span className="workspace-avatar" aria-hidden="true">{initial}</span>
+                  <span className="min-w-0">
+                    <span className="block break-words text-sm font-bold">{name}</span>
+                    <span className="block text-xs text-muted">{t(roleLabels[user.role])}</span>
+                  </span>
+                </DropdownMenu.Label>
+                <DropdownMenu.Separator className="workspace-account-separator" />
+                {user.role === 'ADMIN' && (
+                  <DropdownMenu.Item className="workspace-account-item" onSelect={() => { setMobileNavigationOpen(false); navigate('/admin/security') }}>
+                    <KeyRound size={16} aria-hidden />{t('passkeySettings')}
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item className="workspace-account-item" disabled={Boolean(pending)} onSelect={() => {
-                    setPending('logout')
-                    void api('/api/auth/logout', { method: 'POST', body: {} })
-                      .then(() => navigate('/login', { replace: true }))
-                      .catch(() => undefined)
-                      .finally(() => setPending(''))
-                  }}>
-                    <PendingLabel pending={pending === 'logout'}><LogOut size={16} aria-hidden />{t('logout')}</PendingLabel>
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </div>
+                )}
+                <DropdownMenu.Item className="workspace-account-item" disabled={Boolean(pending)} onSelect={() => {
+                  const next = locale === 'en' ? 'zh-Hant' : 'en'
+                  setPending('locale')
+                  void onLocale(next).catch(() => undefined).finally(() => setPending(''))
+                }}>
+                  <PendingLabel pending={pending === 'locale'}><Globe2 size={16} aria-hidden />{t('language')}</PendingLabel>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item className="workspace-account-item" disabled={Boolean(pending)} onSelect={() => {
+                  setPending('logout')
+                  void api('/api/auth/logout', { method: 'POST', body: {} })
+                    .then(() => navigate('/login', { replace: true }))
+                    .catch(() => undefined)
+                    .finally(() => setPending(''))
+                }}>
+                  <PendingLabel pending={pending === 'logout'}><LogOut size={16} aria-hidden />{t('logout')}</PendingLabel>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         </div>
-        <nav className="workspace-nav" aria-label={t('nav')}>
-          {links[user.role].map(([to, key]) => {
-            const Icon = navIcons[key]
-            return (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/' || to === '/admin'}
-              className="workspace-nav-link"
-            >
-              <Icon size={17} aria-hidden />
-              {t(key)}
-            </NavLink>
-            )
-          })}
-        </nav>
-      </aside>
-      <div className="workspace-body">
-        <main id="main" tabIndex={-1} className="workspace-main outline-none">
-          <div className="workspace-heading">
-            <span className="workspace-symbol"><PageIcon size={22} aria-hidden /></span>
-            <div>
-              <h1>{t(studentDetail ? 'studentDetail' : page)}</h1>
-              <p className="workspace-guide">{t(studentDetail ? 'studentDetailGuide' : `${page}Guide`)}</p>
+      </header>
+      <div className="workspace-layout">
+        <div className="app-sidebar" data-mobile-open={mobileNavigationOpen}>
+          <nav id={navigationId} className="workspace-nav" aria-label={t('nav')} onKeyDown={(event) => {
+            if (event.key !== 'Escape' || !mobileNavigationOpen) return
+            setMobileNavigationOpen(false)
+            navigationButton.current?.focus()
+          }}>
+            {links[user.role].map(([to, key]) => {
+              const Icon = navIcons[key]
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/' || to === '/admin'}
+                  className="workspace-nav-link"
+                  onClick={(event) => {
+                    if (!mobileNavigationOpen || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+                    setMobileNavigationOpen(false)
+                    requestAnimationFrame(() => main.current?.focus())
+                  }}
+                >
+                  <Icon size={17} aria-hidden />
+                  {t(key)}
+                </NavLink>
+              )
+            })}
+          </nav>
+        </div>
+        <div className="workspace-body">
+          <main id="main" ref={main} tabIndex={-1} className="workspace-main outline-none">
+            <div className="workspace-heading">
+              <span className="workspace-symbol"><PageIcon size={22} aria-hidden /></span>
+              <div>
+                <h1>{t(studentDetail ? 'studentDetail' : page)}</h1>
+                <p className="workspace-guide">{t(studentDetail ? 'studentDetailGuide' : `${page}Guide`)}</p>
+              </div>
             </div>
-          </div>
-          {children}
-        </main>
-      </div>
+            {children}
+          </main>
+        </div>
       </div>
       <SiteFooter />
     </div>
