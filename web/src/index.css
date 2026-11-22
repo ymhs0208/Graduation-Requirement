@@ -364,15 +364,18 @@
 .account-search svg { position: absolute; top: calc(50% + .175rem); left: .75rem; color: var(--color-muted); transform: translateY(-50%); pointer-events: none; }
 .account-search input { padding-left: 2.25rem; }
 .account-row-name { display: flex; align-items: center; gap: .65rem; }
+.directory-tabs { display: grid; max-width: 32rem; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .3rem; padding: .3rem; border: 1px solid var(--color-line); border-radius: .78rem; background: #fff; }
+.directory-tabs button { display: flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: .45rem; padding: .42rem .3rem; border-radius: .55rem; color: var(--color-muted); font-size: .84rem; font-weight: 700; overflow-wrap: anywhere; cursor: pointer; }
+.directory-tabs button svg { flex: none; }
+.directory-tabs button:hover { background: #f1f5fb; }
+.directory-tabs button[aria-pressed='true'] { background: #e8f0fd; color: #1d4786; }
 .directory-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
 .directory-summary .metric-card { align-items: flex-start; }
-.directory-filters { grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); }
-.directory-row { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, .55fr) auto; align-items: center; gap: .7rem; padding: .9rem clamp(.9rem, 2vw, 1.4rem); border-top: 1px solid var(--color-line); overflow-wrap: anywhere; }
+.directory-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(6rem, .18fr) auto; align-items: center; gap: .7rem; padding: .9rem clamp(.9rem, 2vw, 1.4rem); border-top: 1px solid var(--color-line); overflow-wrap: anywhere; }
 .directory-row:nth-child(even) { background: #f8faff; }
 .directory-results { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .55rem; min-height: 2.85rem; padding: .35rem clamp(.9rem, 2vw, 1.4rem); }
 @media (max-width: 670px) {
-  .directory-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .directory-filters > :first-child { grid-column: 1 / -1; }
+  .directory-filters { grid-template-columns: minmax(0, 1fr); }
   .directory-summary .metric-card { flex-direction: column; gap: .35rem; padding: .65rem; }
   .directory-summary .workspace-event-icon { width: 1.9rem; height: 1.9rem; }
   .directory-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; }

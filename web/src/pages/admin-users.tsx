@@ -9,13 +9,13 @@ import { useI18n } from '../lib/i18n'
 import { ImportPanel } from './import-panel'
 import { BatchImportLink } from './admin-batch-import'
 
-const roles = { STUDENT: 'studentRole', TEACHER: 'teacherRole', ADMIN: 'adminRole' } as const
 const accountTypes = {
-  STUDENT: { title: 'createStudentAccount', label: 'directoryStudentId', invalid: 'directoryBadStudentId', example: 'B11523001', pattern: /^B\d{8}$/, Icon: GraduationCap },
-  TEACHER: { title: 'createTeacherAccount', label: 'directoryTeacherId', invalid: 'directoryBadTeacherId', example: 'T1001', pattern: /^T\d{4}$/, Icon: Presentation },
-  ADMIN: { title: 'createAdminAccount', label: 'account', invalid: 'directoryBadAdminId', example: 'A0001', pattern: /^A\d{4}$/, Icon: ShieldCheck },
+  STUDENT: { tab: 'studentRole', heading: 'directoryStudents', title: 'createStudentAccount', label: 'directoryStudentId', invalid: 'directoryBadStudentId', example: 'B11523001', pattern: /^B\d{8}$/, Icon: GraduationCap },
+  TEACHER: { tab: 'directoryTeacher', heading: 'directoryTeachers', title: 'createTeacherAccount', label: 'directoryTeacherId', invalid: 'directoryBadTeacherId', example: 'T1001', pattern: /^T\d{4}$/, Icon: Presentation },
+  ADMIN: { tab: 'directoryAdmin', heading: 'directoryAdmins', title: 'createAdminAccount', label: 'account', invalid: 'directoryBadAdminId', example: 'A0001', pattern: /^A\d{4}$/, Icon: ShieldCheck },
 } as const
-type Role = keyof typeof roles
+type Role = keyof typeof accountTypes
+const accountRoles = Object.keys(accountTypes) as Role[]
 type User = {
   id: string; account: string; nameZh: string; nameEn: string; role: Role; status: 'ACTIVE' | 'DEACTIVATED'; anonymized: boolean
   cohortYear: number | null; classNameZh: string
@@ -32,7 +32,7 @@ export function AdminUsers() {
   const query = useQuery({ queryKey: ['users'], queryFn: () => api<{ users: User[]; classes?: Class[] }>('/api/admin/users') })
   const [mode, setMode] = useState<'list' | 'import' | Role>('list')
   const [search, setSearch] = useState('')
-  const [roleFilter, setRoleFilter] = useState<Role | ''>('')
+  const [role, setRole] = useState<Role>('STUDENT')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DEACTIVATED' | 'ANONYMIZED'>('ALL')
   const [page, setPage] = useState(1)
   const [form, setForm] = useState(emptyForm)
@@ -46,13 +46,13 @@ export function AdminUsers() {
   const createdMessage = useRef<HTMLDivElement>(null)
   const createRole = mode === 'list' || mode === 'import' ? null : mode
   const accountType = createRole && accountTypes[createRole]
+  const directoryType = accountTypes[role]
   const dirty = Object.values(form).some(Boolean)
   useUnsaved(dirty)
 
   const term = search.trim().toLowerCase()
-  const directory = query.data?.users ?? []
+  const directory = query.data?.users.filter((user) => user.role === role) ?? []
   const users = directory.filter((user) =>
-    (!roleFilter || user.role === roleFilter) &&
     (statusFilter === 'ALL' || statusFilter === (user.anonymized ? 'ANONYMIZED' : user.status)) &&
     [user.account, user.nameZh, user.nameEn, user.classNameZh].some((value) => value?.toLowerCase().includes(term)),
   )
@@ -99,13 +99,25 @@ export function AdminUsers() {
 
   function resetFilters() {
     setSearch('')
-    setRoleFilter('')
     setStatusFilter('ALL')
     setPage(1)
   }
 
   return (
     <div className="space-y-4">
+      {mode === 'list' && <div className="directory-tabs" role="group" aria-label={t('directoryRoleTabs')}>
+        {accountRoles.map((next) => {
+          const { Icon, tab } = accountTypes[next]
+          return <button key={next} type="button" aria-pressed={role === next} aria-controls="accounts-list" disabled={busy} onClick={() => {
+            if (role === next) return
+            setRole(next)
+            setStatusError('')
+            resetFilters()
+          }}>
+            <Icon size={17} aria-hidden />{t(tab)}
+          </button>
+        })}
+      </div>}
       {mode === 'list' && query.data && !query.isError && (
         <div className="directory-summary">
           {([
@@ -120,18 +132,16 @@ export function AdminUsers() {
           ))}
         </div>
       )}
-      <section id="accounts-list" hidden={mode !== 'list'} className="card account-directory">
+      <section id="accounts-list" hidden={mode !== 'list'} className="card account-directory" aria-labelledby="role-directory-title">
         <div className="panel-heading">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 ref={directoryHeading} tabIndex={-1} className="section-title">{t('accountList')}</h2>
+            <h2 id="role-directory-title" ref={directoryHeading} tabIndex={-1} className="section-title">{t(directoryType.heading)}</h2>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-ghost" onClick={() => open('import')}><FileUp size={17} aria-hidden />{t('importTitle')}</button>
-              <BatchImportLink kind="classes" />
-              {(Object.entries(accountTypes) as [Role, (typeof accountTypes)[Role]][]).map(([role, { title, Icon }]) => (
-                <button key={role} type="button" className={`btn ${role === 'ADMIN' ? 'btn-ghost' : 'btn-primary'}`} onClick={() => open(role)}>
-                  <Icon size={17} aria-hidden />{t(title)}
-                </button>
-              ))}
+              {role === 'STUDENT' && <BatchImportLink kind="classes" />}
+              <button type="button" className="btn btn-primary" onClick={() => open(role)}>
+                <directoryType.Icon size={17} aria-hidden />{t(directoryType.title)}
+              </button>
             </div>
           </div>
           <div className="account-filters directory-filters">
@@ -141,13 +151,6 @@ export function AdminUsers() {
                 <Search size={17} aria-hidden />
                 <input className="field w-full" type="search" value={search} placeholder={t('accountSearchHint')} onChange={(event) => { setSearch(event.target.value); setPage(1) }} />
               </span>
-            </label>
-            <label className="text-sm font-semibold">
-              {t('roleLabel')}
-              <select className="field w-full" value={roleFilter} onChange={(event) => { setRoleFilter(event.target.value as Role | ''); setPage(1) }}>
-                <option value="">{t('allRoles')}</option>
-                {(Object.keys(roles) as Role[]).map((role) => <option key={role} value={role}>{t(roles[role])}</option>)}
-              </select>
             </label>
             <label className="text-sm font-semibold">{t('recognizedStatus')}
               <select className="field w-full" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(1) }}>
@@ -165,9 +168,9 @@ export function AdminUsers() {
         ) : <>
           <div className="directory-results">
             <p className="text-sm text-muted" role="status">{t('directoryResults')} {users.length} / {directory.length}</p>
-            {(search || roleFilter || statusFilter !== 'ALL') && <button type="button" className="btn btn-ghost" onClick={resetFilters}>{t('directoryClear')}</button>}
+            {(search || statusFilter !== 'ALL') && <button type="button" className="btn btn-ghost" onClick={resetFilters}>{t('directoryClear')}</button>}
           </div>
-          {users.length === 0 ? <EmptyState>{term || roleFilter || statusFilter !== 'ALL' ? t('noMatchingAccounts') : t('empty')}</EmptyState> : (
+          {users.length === 0 ? <EmptyState>{term || statusFilter !== 'ALL' ? t('noMatchingAccounts') : t('empty')}</EmptyState> : (
           <ul className="directory-list">
             {visible.map((user) => {
               const deactivating = user.status === 'ACTIVE'
@@ -177,11 +180,10 @@ export function AdminUsers() {
                 <li key={user.id} className="directory-row">
                   <div className="account-row-name">
                     <span className="workspace-avatar" aria-hidden="true">{Array.from(name || user.account)[0]}</span>
-                    <div className="min-w-0"><p className="font-bold">{name || user.account}</p><p className="text-sm text-muted">{user.account}</p></div>
-                  </div>
-                  <div className="directory-role text-sm text-muted">
-                    <p className="font-semibold text-ink">{t(roles[user.role])}</p>
-                    {user.role === 'STUDENT' && !user.anonymized && <p>{[user.cohortYear ? `${user.cohortYear} ${t('cohort')}` : '', user.classNameZh].filter(Boolean).join(' · ')}</p>}
+                    <div className="min-w-0">
+                      <p className="font-bold">{name || user.account}</p>
+                      <p className="text-sm text-muted">{[user.account, role === 'STUDENT' && !user.anonymized ? user.classNameZh : '', role === 'STUDENT' && !user.anonymized && user.cohortYear ? `${user.cohortYear} ${t('cohort')}` : ''].filter(Boolean).join(' · ')}</p>
+                    </div>
                   </div>
                   <span className={`account-state justify-self-start ${deactivating && !user.anonymized ? 'account-state-active' : ''}`}>{t(user.anonymized ? 'accountAnonymized' : deactivating ? 'itemActive' : 'accountInactive')}</span>
                   {!user.anonymized && <button type="button" className="btn btn-ghost" disabled={busy} aria-label={`${action} ${user.account}`} onClick={() => run(async () => {
