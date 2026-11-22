@@ -54,7 +54,7 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-line bg-white px-4 py-4 sm:px-6">
       <a
-        className="mx-auto block max-w-4xl text-center text-sm font-medium leading-6 text-teal underline decoration-[#8fb8aa] underline-offset-4"
+        className="mx-auto block max-w-4xl text-center text-sm font-medium leading-6 text-teal underline decoration-[#b7c3d6] underline-offset-4"
         href="http://www.nutc.edu.tw/files/11-1000-150.php"
         target="_blank"
         rel="noopener noreferrer"
@@ -92,7 +92,7 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
               end={to === '/' || to === '/admin' || to === '/teacher'}
               className={({ isActive }) =>
                 `block whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive ? 'bg-white text-pine shadow-sm' : 'text-emerald-50/90 hover:bg-white/10'
+                  isActive ? 'bg-white text-pine shadow-sm' : 'text-white/90 hover:bg-white/10'
                 }`
               }
             >
@@ -105,7 +105,7 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
         <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
           <img src="/brand/program-wordmark.png" alt={t('program')} className="hidden h-14 max-w-[320px] object-contain object-left md:block" />
           <div className="flex flex-wrap items-center gap-2">
-            <span className="max-w-[12rem] truncate rounded-full bg-[#eef5f1] px-3 py-1 text-sm font-medium text-ink">{name}</span>
+            <span className="max-w-[12rem] truncate rounded-full bg-[#eef1f6] px-3 py-1 text-sm font-medium text-ink">{name}</span>
             <button
               className="btn btn-ghost"
               type="button"
@@ -150,15 +150,15 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
 }
 
 const pillTone: Record<string, [string, 'passed' | 'underReview' | 'missing' | 'unpublished' | 'info' | 'canGraduate' | 'blocked' | 'pending' | 'office']> = {
-  passed: ['bg-[#e7f6ee] text-[#08663a] ring-[#b7e4cc]', 'passed'],
-  under_review: ['bg-[#fff4dc] text-[#7a4e00] ring-[#f0d7a2]', 'underReview'],
-  missing: ['bg-[#fdeceb] text-[#9b1c16] ring-[#f4c7c2]', 'missing'],
-  unpublished: ['bg-[#e7f3fa] text-[#0f5f8a] ring-[#c5dff0]', 'unpublished'],
-  info: ['bg-[#f3f5f4] text-[#3f514c] ring-[#d5deda]', 'info'],
-  ready: ['bg-[#e7f6ee] text-[#08663a] ring-[#b7e4cc]', 'canGraduate'],
-  blocked: ['bg-[#fdeceb] text-[#9b1c16] ring-[#f4c7c2]', 'blocked'],
-  pending_review: ['bg-[#fff4dc] text-[#7a4e00] ring-[#f0d7a2]', 'pending'],
-  needs_office: ['bg-[#e7f3fa] text-[#0f5f8a] ring-[#c5dff0]', 'office'],
+  passed: ['bg-[#e5f6ee] text-[#0d6b45] ring-[#b7e0cc]', 'passed'],
+  under_review: ['bg-[#fff6e0] text-[#8a5600] ring-[#f0d7a2]', 'underReview'],
+  missing: ['bg-[#fdecee] text-[#9e1d22] ring-[#f4c7c8]', 'missing'],
+  unpublished: ['bg-[#e8eef6] text-[#314e78] ring-[#c5d4ea]', 'unpublished'],
+  info: ['bg-[#eef1f6] text-[#3e4a5c] ring-[#d2d6de]', 'info'],
+  ready: ['bg-[#e5f6ee] text-[#0d6b45] ring-[#b7e0cc]', 'canGraduate'],
+  blocked: ['bg-[#fdecee] text-[#9e1d22] ring-[#f4c7c8]', 'blocked'],
+  pending_review: ['bg-[#fff6e0] text-[#8a5600] ring-[#f0d7a2]', 'pending'],
+  needs_office: ['bg-[#e8eef6] text-[#314e78] ring-[#c5d4ea]', 'office'],
 }
 
 const pillIcon = {
@@ -175,7 +175,7 @@ const pillIcon = {
 
 export function StatusPill({ state }: { state: string }) {
   const { t } = useI18n()
-  const [color, key] = pillTone[state] ?? ['bg-[#f3f5f4] text-[#3f514c] ring-[#d5deda]', 'info']
+  const [color, key] = pillTone[state] ?? ['bg-[#eef1f6] text-[#3e4a5c] ring-[#d2d6de]', 'info']
   const Icon = pillIcon[key]
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${color}`}>
@@ -196,11 +196,11 @@ export function Ring({ value, label }: { value: number; label: string }) {
       <svg viewBox="0 0 100 100" className="h-[8.5rem] w-[8.5rem] -rotate-90" aria-hidden>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#1aa37a" />
-            <stop offset="100%" stopColor="#0e6b56" />
+            <stop offset="0%" stopColor="#4c7ed0" />
+            <stop offset="100%" stopColor="#1f4e9c" />
           </linearGradient>
         </defs>
-        <circle cx="50" cy="50" r={radius} stroke="#e3eee8" strokeWidth="9" fill="none" />
+        <circle cx="50" cy="50" r={radius} stroke="#e4e8f0" strokeWidth="9" fill="none" />
         <circle
           cx="50"
           cy="50"

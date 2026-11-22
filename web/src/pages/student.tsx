@@ -40,7 +40,7 @@ type Submission = {
 }
 
 const thresholdAccent: Record<string, string> = {
-  passed: 'border-l-[#0e7a45]',
+  passed: 'border-l-[#0f7a4a]',
   under_review: 'border-l-[#d0891f]',
   missing: 'border-l-[#c24134]',
   unpublished: 'border-l-[#3b82b6]',
@@ -54,7 +54,7 @@ export function StudentHome() {
   const [step, setStep] = useState(0)
   const [leaving, setLeaving] = useState(false)
   if (query.isLoading) return <PageSkeleton />
-  if (query.isError || !query.data) return <p className="text-sm text-[#9b1c16]">{t('error')}</p>
+  if (query.isError || !query.data) return <p className="text-sm text-[#9e1d22]">{t('error')}</p>
   const { profile, progress } = query.data
   const ratio = progress.requiredTotal ? progress.earnedTowardTotal / progress.requiredTotal : 0
   const steps = [t('onboarding1'), t('onboarding2'), t('onboarding3'), t('onboarding4')]
@@ -115,16 +115,16 @@ export function StudentHome() {
           <h1 className="mt-1 text-2xl font-bold tracking-tight">{locale === 'en' ? profile.nameEn : profile.nameZh}</h1>
           <div className="mt-3 flex flex-wrap gap-2">
             <StatusPill state={progress.verdict} />
-            {progress.atRisk && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fdeceb] px-2.5 py-1 text-xs font-semibold text-[#9b1c16] ring-1 ring-[#f4c7c2]">{t('atRisk')}</span>}
+            {progress.atRisk && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fdecee] px-2.5 py-1 text-xs font-semibold text-[#9e1d22] ring-1 ring-[#f4c7c8]">{t('atRisk')}</span>}
             {progress.delayed && <span className="inline-flex rounded-full bg-pine px-2.5 py-1 text-xs font-semibold text-white">{t('delayed')}</span>}
           </div>
           {(progress.missing.length > 0 || progress.office.length > 0) && (
-            <ul className="mt-4 space-y-1.5 rounded-xl bg-[#f7faf8] px-3 py-3 text-sm">
+            <ul className="mt-4 space-y-1.5 rounded-xl bg-[#f6f7fb] px-3 py-3 text-sm">
               {progress.missing.map((item) => (
                 <li key={item.nameZh}>· {locale === 'en' ? item.nameEn : item.nameZh}</li>
               ))}
               {progress.office.map((item) => (
-                <li key={item.nameZh} className="text-[#0f5f8a]">
+                <li key={item.nameZh} className="text-[#314e78]">
                   · {locale === 'en' ? item.nameEn : item.nameZh}（{t('placeholder')}）
                 </li>
               ))}
@@ -145,8 +145,8 @@ export function StudentHome() {
                 {category.earned}
                 <span className="text-base font-medium text-muted"> / {category.requiredCredits ?? '—'}</span>
               </p>
-              <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#e4eee9]">
-                <div className={`h-full rounded-full ${category.met ? 'bg-[#0e7a45]' : 'bg-teal'}`} style={{ width: `${width}%` }} />
+              <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#e4e8f0]">
+                <div className={`h-full rounded-full ${category.met ? 'bg-[#0f7a4a]' : 'bg-teal'}`} style={{ width: `${width}%` }} />
               </div>
               <p className="mt-2 text-xs leading-5 text-muted">{locale === 'en' ? category.noteEn : category.noteZh}</p>
             </article>
@@ -159,7 +159,7 @@ export function StudentHome() {
             <div className="min-w-0">
               <h2 className="font-semibold">{locale === 'en' ? threshold.nameEn : threshold.nameZh}</h2>
               <p className="text-sm text-muted">{locale === 'en' ? threshold.descriptionEn : threshold.descriptionZh}</p>
-              {threshold.overdue && <p className="text-sm font-medium text-[#9b1c16]">{t('atRisk')}</p>}
+              {threshold.overdue && <p className="text-sm font-medium text-[#9e1d22]">{t('atRisk')}</p>}
             </div>
             <div className="shrink-0">
               <StatusPill state={threshold.state} />
@@ -178,7 +178,7 @@ export function PlanPage() {
     queryFn: () => api<{ items: { id: string; studyYear: number; nameZh: string; nameEn: string; moduleZh: string; moduleEn: string; requirementType: string; sourceNoteZh: string; sourceNoteEn: string }[]; progress: Progress }>('/api/me/plan'),
   })
   if (query.isLoading) return <PageSkeleton />
-  if (!query.data) return <p className="text-sm text-[#9b1c16]">{t('error')}</p>
+  if (!query.data) return <p className="text-sm text-[#9e1d22]">{t('error')}</p>
   const years = [1, 2, 3, 4]
   return (
     <div className="space-y-6">
@@ -308,9 +308,9 @@ export function EvidencePage() {
           <span className="block font-medium text-ink">{file ? file.name : t('drop')}</span>
           <input className="sr-only" type="file" accept="application/pdf,image/png,image/jpeg" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
         </label>
-        <p className={`text-sm ${fileReady ? 'text-[#08663a]' : 'text-[#9b1c16]'}`}>{fileNote}</p>
+        <p className={`text-sm ${fileReady ? 'text-[#0d6b45]' : 'text-[#9e1d22]'}`}>{fileNote}</p>
         {percent !== null && <UploadProgress percent={percent} onCancel={() => uploadAbort.current?.abort()} />}
-        {message && <p className="text-sm font-medium text-[#9b1c16]">{message}</p>}
+        {message && <p className="text-sm font-medium text-[#9e1d22]">{message}</p>}
         <button className="btn btn-primary" type="submit" disabled={busy || !fileReady || !selected} title={!fileReady ? fileNote : undefined}>
           <PendingLabel pending={busy}>{t('submit')}</PendingLabel>
         </button>

@@ -57,7 +57,7 @@ export function TeacherHome() {
                 </td>
                 <td>{locale === 'en' ? student.nameEn : student.nameZh}</td>
                 <td>
-                  <StatusPill state={student.verdict} /> {student.atRisk && <span className="ml-1 inline-flex rounded-full bg-[#fdeceb] px-2 py-1 text-xs font-semibold text-[#9b1c16]">{t('atRisk')}</span>}
+                  <StatusPill state={student.verdict} /> {student.atRisk && <span className="ml-1 inline-flex rounded-full bg-[#fdecee] px-2 py-1 text-xs font-semibold text-[#9e1d22]">{t('atRisk')}</span>}
                 </td>
                 <td className="tabular-nums">
                   {student.earnedTowardTotal}
@@ -102,7 +102,7 @@ export function TeacherStudent() {
           <div className="mt-3">
             <StatusPill state={query.data.progress.verdict} />
           </div>
-          <p className="mt-4 rounded-xl bg-[#fff4dc] px-3 py-2 text-sm leading-6 text-[#7a4e00]">{t('reminderHint')}</p>
+          <p className="mt-4 rounded-xl bg-[#fff6e0] px-3 py-2 text-sm leading-6 text-[#8a5600]">{t('reminderHint')}</p>
         </div>
         {query.data.submissions.map((submission) => (
           <article key={submission.id} className="card p-4">
@@ -144,7 +144,7 @@ export function TeacherStudent() {
           {!body.trim() && <p className="text-xs text-muted">{t('reminderHint')}</p>}
         </form>
         {query.data.comments.map((comment) => (
-          <p key={comment.id} className="rounded-2xl bg-[#eef5f1] px-4 py-3 text-sm leading-6">
+          <p key={comment.id} className="rounded-2xl bg-[#eef1f6] px-4 py-3 text-sm leading-6">
             {comment.body}
           </p>
         ))}

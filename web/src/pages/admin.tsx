@@ -8,7 +8,7 @@ import { PageSkeleton, PendingLabel, StepStatus } from '../components/feedback'
 import { useI18n } from '../lib/i18n'
 import { ImportPanel } from './import-panel'
 
-const statBar = ['bg-teal', 'bg-pine', 'bg-[#d0891f]', 'bg-[#c24134]']
+const statBar = ['bg-teal', 'bg-[#5c6b7a]', 'bg-[#c48a12]', 'bg-[#c24134]']
 
 export function AdminStats() {
   const { t, locale } = useI18n()
@@ -180,7 +180,7 @@ export function AdminReviews() {
         <p className="text-sm text-muted">
           {locale === 'en' ? submission.recognizedItem?.nameEn : submission.recognizedItem?.nameZh} · {t('score')} {submission.scoreText || '—'} · {new Date(submission.createdAt).toLocaleString()}
         </p>
-        {submission.note && <p className="rounded-xl bg-[#f7faf8] px-3 py-2 text-sm">{submission.note}</p>}
+        {submission.note && <p className="rounded-xl bg-[#f6f7fb] px-3 py-2 text-sm">{submission.note}</p>}
         <div className="flex flex-wrap gap-2">
           {submission.files.map((file) => (
             <button key={file.id} className={`btn px-2.5 py-1 ${activeFile === file.id ? 'btn-ink' : 'btn-ghost'}`} type="button" onClick={() => setFileId(file.id)}>
@@ -225,7 +225,7 @@ export function AdminReviews() {
           {query.data.submissions.map((item, index) => (
             <button
               key={item.id}
-              className={`rounded-full px-3 py-1 font-medium ${index === current ? 'bg-pine text-white' : 'bg-[#eef5f1] text-ink'}`}
+              className={`rounded-full px-3 py-1 font-medium ${index === current ? 'bg-pine text-white' : 'bg-[#eef1f6] text-ink'}`}
               type="button"
               onClick={() => { setCurrent(index); setFileId('') }}
             >
@@ -296,9 +296,9 @@ export function AdminUsers() {
           <PendingLabel pending={busy}>{t('save')}</PendingLabel>
         </button>
       </form>
-      {formIssues.length > 0 && dirty && <p className="text-sm text-[#9b1c16]">{formIssues[0]}</p>}
-      {formMessage && <p className="text-sm font-medium text-[#9b1c16]">{formMessage}</p>}
-      {temp && <p className="rounded-xl bg-[#fff4dc] px-3 py-2 text-sm font-medium text-[#7a4e00]">暫時密碼（只顯示一次）：{temp}</p>}
+      {formIssues.length > 0 && dirty && <p className="text-sm text-[#9e1d22]">{formIssues[0]}</p>}
+      {formMessage && <p className="text-sm font-medium text-[#9e1d22]">{formMessage}</p>}
+      {temp && <p className="rounded-xl bg-[#fff6e0] px-3 py-2 text-sm font-medium text-[#8a5600]">暫時密碼（只顯示一次）：{temp}</p>}
       <div className="card overflow-auto">
         <table className="data-table">
           <caption className="sr-only">{t('users')}</caption>
@@ -320,7 +320,7 @@ export function AdminUsers() {
                 <td>{user.status}</td>
                 <td>
                   {user.status === 'ACTIVE' ? (
-                    <button className="font-medium text-[#9b1c16] underline-offset-2 hover:underline" type="button" disabled={busy} onClick={() => run(async () => { const ok = await confirm({ title: t('confirmTitle'), body: `${user.account} ${t('confirmDeactivate')}`, confirm: t('deactivate'), danger: true }); if (!ok) return; await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: { status: 'DEACTIVATED', deactivationReason: 'SUSPENDED' } }); await client.invalidateQueries({ queryKey: ['users'] }) })}>
+                    <button className="font-medium text-[#9e1d22] underline-offset-2 hover:underline" type="button" disabled={busy} onClick={() => run(async () => { const ok = await confirm({ title: t('confirmTitle'), body: `${user.account} ${t('confirmDeactivate')}`, confirm: t('deactivate'), danger: true }); if (!ok) return; await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: { status: 'DEACTIVATED', deactivationReason: 'SUSPENDED' } }); await client.invalidateQueries({ queryKey: ['users'] }) })}>
                       {t('deactivate')}
                     </button>
                   ) : (
@@ -417,7 +417,7 @@ export function AdminRules() {
           >
             <PendingLabel pending={busy}>{t('save')}</PendingLabel>
           </button>
-          {ruleMessage && <p className="mt-2 text-sm text-[#9b1c16]">{ruleMessage}</p>}
+          {ruleMessage && <p className="mt-2 text-sm text-[#9e1d22]">{ruleMessage}</p>}
         </section>
       ))}
     </div>

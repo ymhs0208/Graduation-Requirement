@@ -69,7 +69,7 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
   }, [pdf, page, zoom])
 
   return (
-    <section className="card flex min-h-64 flex-col overflow-hidden bg-[#f7faf8]" aria-label={t('preview')}>
+    <section className="card flex min-h-64 flex-col overflow-hidden bg-[#f6f7fb]" aria-label={t('preview')}>
       <div className="flex flex-wrap items-center gap-2 border-b border-line bg-white px-3 py-2.5 text-sm" role="toolbar" aria-label={t('preview')}>
         <span className="mr-1 font-semibold text-ink" id="preview-label">{t('preview')}</span>
         <button className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setZoom((value) => Math.max(0.6, value - 0.2))} aria-label={t('zoomOut')}>
@@ -93,7 +93,7 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
         )}
       </div>
       <div className="flex-1 overflow-auto p-4">
-        {error && <p className="text-sm font-medium text-[#9b1c16]" role="alert">{t('error')}</p>}
+        {error && <p className="text-sm font-medium text-[#9e1d22]" role="alert">{t('error')}</p>}
         {image && <img alt={t('preview')} src={image} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="rounded-lg bg-white shadow-md" />}
         <canvas ref={canvasRef} role="img" aria-label={t('preview')} className={pdf ? 'rounded-lg bg-white shadow-md' : 'hidden'} />
       </div>

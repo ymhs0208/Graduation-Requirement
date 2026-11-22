@@ -15,10 +15,10 @@ type Preview = {
 }
 
 const tone: Record<Status, string> = {
-  valid: 'bg-[#e7f6ee]',
-  error: 'bg-[#fdeceb]',
-  duplicate: 'bg-[#fff4dc]',
-  conflict: 'bg-[#e7f3fa]',
+  valid: 'bg-[#e5f6ee]',
+  error: 'bg-[#fdecee]',
+  duplicate: 'bg-[#fff6e0]',
+  conflict: 'bg-[#e8eef6]',
 }
 
 async function download(path: string, filename: string) {
@@ -79,7 +79,7 @@ export function ImportPanel() {
           }}
         />
       </label>
-      {fileNote && <p className="text-sm font-medium text-[#9b1c16]">{fileNote}</p>}
+      {fileNote && <p className="text-sm font-medium text-[#9e1d22]">{fileNote}</p>}
       <button
         className="btn btn-primary"
         type="button"
@@ -114,11 +114,11 @@ export function ImportPanel() {
       {preview && (
         <>
           <div className="flex flex-wrap gap-2 text-sm">
-            <span className="rounded-full bg-[#e7f6ee] px-3 py-1 font-semibold text-[#08663a]">{t('importValid')} {preview.counts.valid}</span>
-            <span className="rounded-full bg-[#fdeceb] px-3 py-1 font-semibold text-[#9b1c16]">{t('importError')} {preview.counts.error}</span>
-            <span className="rounded-full bg-[#fff4dc] px-3 py-1 font-semibold text-[#7a4e00]">{t('importDuplicate')} {preview.counts.duplicate}</span>
-            <span className="rounded-full bg-[#e7f3fa] px-3 py-1 font-semibold text-[#0f5f8a]">{t('importConflict')} {preview.counts.conflict}</span>
-            <span className="rounded-full bg-[#eef5f1] px-3 py-1 text-muted">{t('importEncoding')} {preview.encoding}</span>
+            <span className="rounded-full bg-[#e5f6ee] px-3 py-1 font-semibold text-[#0d6b45]">{t('importValid')} {preview.counts.valid}</span>
+            <span className="rounded-full bg-[#fdecee] px-3 py-1 font-semibold text-[#9e1d22]">{t('importError')} {preview.counts.error}</span>
+            <span className="rounded-full bg-[#fff6e0] px-3 py-1 font-semibold text-[#8a5600]">{t('importDuplicate')} {preview.counts.duplicate}</span>
+            <span className="rounded-full bg-[#e8eef6] px-3 py-1 font-semibold text-[#314e78]">{t('importConflict')} {preview.counts.conflict}</span>
+            <span className="rounded-full bg-[#eef1f6] px-3 py-1 text-muted">{t('importEncoding')} {preview.encoding}</span>
           </div>
           <div className="overflow-auto rounded-xl border border-line">
             <table className="data-table">
@@ -204,7 +204,7 @@ export function ImportPanel() {
       )}
       {message && <p className="text-sm font-medium">{message}</p>}
       {passwords.length > 0 && (
-        <ul className="space-y-1 rounded-xl bg-[#fff4dc] px-3 py-2 text-sm text-[#7a4e00]">
+        <ul className="space-y-1 rounded-xl bg-[#fff6e0] px-3 py-2 text-sm text-[#8a5600]">
           {passwords.map((item) => (
             <li key={item.account}>{item.account}：{item.tempPassword}</li>
           ))}

@@ -24,7 +24,7 @@ test('login page has no WCAG 2.1 AA violations', async ({ page }) => {
 
 test('student pages have no WCAG 2.1 AA violations', async ({ page }) => {
   await signIn(page, 'B11023008', 'Study#Nutc2026')
-  await page.getByRole('heading', { name: '林可芯' }).waitFor()
+  await page.getByText('B11023008').waitFor()
   await expectAccessible(page)
   for (const path of ['/plan', '/evidence', '/notifications', '/help']) {
     await page.goto(path)

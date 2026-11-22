@@ -40,12 +40,12 @@ function LoginPage() {
         <div className="absolute inset-x-0 top-0 h-1 bg-gold" />
         <img src="/brand/program-wordmark.png" alt={t('program')} className="h-16 w-fit rounded-xl bg-white object-contain p-2 shadow-md" />
         <div>
-          <p className="text-xs font-semibold tracking-[0.18em] text-emerald-100/75">NATIONAL TAICHUNG UNIVERSITY OF SCIENCE AND TECHNOLOGY</p>
+          <p className="text-xs font-semibold tracking-[0.18em] text-white/75">NATIONAL TAICHUNG UNIVERSITY OF SCIENCE AND TECHNOLOGY</p>
           <p className="mt-4 text-4xl font-bold tracking-tight">國立臺中科技大學</p>
-          <p className="mt-2 text-lg text-emerald-50/90">人工智慧應用工程學士學位學程</p>
-          <p className="mt-6 max-w-md text-sm leading-7 text-emerald-50/75">從入學看到畢業，規則、學分與證明放在同一頁。</p>
+          <p className="mt-2 text-lg text-white/90">人工智慧應用工程學士學位學程</p>
+          <p className="mt-6 max-w-md text-sm leading-7 text-white/80">從入學看到畢業，規則、學分與證明放在同一頁。</p>
         </div>
-        <p className="text-xs text-emerald-100/60">畢業門檻追蹤</p>
+        <p className="text-xs text-white/70">畢業門檻追蹤</p>
       </div>
       <div className="flex items-center justify-center bg-paper px-5 py-12">
         <form
@@ -91,7 +91,7 @@ function LoginPage() {
               <span className="mt-1 block text-xs font-normal text-muted">{t('totpHint')}</span>
             </label>
           )}
-          {message && <p className="rounded-xl bg-[#fdeceb] px-3 py-2 text-sm font-medium text-[#9b1c16]">{message}</p>}
+          {message && <p className="rounded-xl bg-[#fdecee] px-3 py-2 text-sm font-medium text-[#9e1d22]">{message}</p>}
           <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
             {forgot ? t('forgot') : t('login')}
           </PendingButton>
@@ -138,7 +138,7 @@ function PasswordPage() {
         <p className="text-sm text-muted">{t('passwordRule')}</p>
         <input className="field w-full" type="password" aria-label={t('currentPassword')} placeholder={t('currentPassword')} {...form.register('currentPassword')} />
         <input className="field w-full" type="password" aria-label={t('nextPassword')} placeholder={t('nextPassword')} {...form.register('nextPassword')} />
-        {message && <p className="text-sm font-medium text-[#9b1c16]">{message}</p>}
+        {message && <p className="text-sm font-medium text-[#9e1d22]">{message}</p>}
         <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
         </PendingButton>
@@ -181,7 +181,7 @@ function ResetPage() {
         <img src="/brand/program-mark.png" alt={t('program')} className="h-12 w-12 rounded-xl object-contain" />
         <h1 className="text-2xl font-bold tracking-tight">{t('changePassword')}</h1>
         <input className="field w-full" type="password" aria-label={t('nextPassword')} value={password} onChange={(event) => setPassword(event.target.value)} />
-        {message && <p className="rounded-xl bg-[#fdeceb] px-3 py-2 text-sm font-medium text-[#9b1c16]">{message}</p>}
+        {message && <p className="rounded-xl bg-[#fdecee] px-3 py-2 text-sm font-medium text-[#9e1d22]">{message}</p>}
         <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
         </PendingButton>
@@ -221,7 +221,7 @@ function TotpPage() {
       >
         <img src="/brand/program-mark.png" alt={t('program')} className="h-12 w-12 rounded-xl object-contain" />
         <h1 className="text-2xl font-bold tracking-tight">{t('setupTotp')}</h1>
-        <p className="break-all rounded-xl bg-[#eef5f1] p-3 font-mono text-sm text-ink">{secret}</p>
+        <p className="break-all rounded-xl bg-[#eef1f6] p-3 font-mono text-sm text-ink">{secret}</p>
         <input className="field w-full" aria-label={t('totp')} value={token} onChange={(event) => setToken(event.target.value)} />
         <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
           {t('save')}
