@@ -97,7 +97,7 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
           </>
         )}
       </div>
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4" tabIndex={0} role="group" aria-label={t('reviewDocumentContent')}>
         {error && <LoadError message={t('previewFailed')} onRetry={() => setAttempt((value) => value + 1)} />}
         {!error && !image && !pdf && <p role="status">{t('loading')}</p>}
         {!error && image && <img alt={t('preview')} src={image} onError={() => setError('preview')} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="rounded-lg bg-white shadow-md" />}

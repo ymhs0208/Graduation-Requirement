@@ -1,9 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Award, CalendarClock, ClipboardCheck, GraduationCap, History, TriangleAlert } from 'lucide-react'
+import { Award, CalendarClock, GraduationCap, History, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfirm, useLock } from '../components/confirm'
-import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
 import { api, downloadCsv, errorMessage } from '../lib/api'
 import { LoadError, PageSkeleton, PendingLabel, StepStatus } from '../components/feedback'
@@ -141,118 +140,6 @@ export function AdminStats() {
         </div>
         )}
       </section>
-    </div>
-  )
-}
-
-export function AdminReviews() {
-  const { t, locale } = useI18n()
-  const confirm = useConfirm()
-  const { busy, run } = useLock()
-  const client = useQueryClient()
-  const query = useQuery({
-    queryKey: ['reviews'],
-    queryFn: () =>
-      api<{
-        submissions: {
-          id: string
-          scoreText: string | null
-          note: string | null
-          createdAt: string
-          status: string
-          threshold?: { nameZh: string; nameEn: string }
-          recognizedItem?: { nameZh: string; nameEn: string } | null
-          student?: { account: string; nameZh: string; nameEn: string }
-          files: { id: string; originalName: string }[]
-        }[]
-      }>('/api/admin/reviews'),
-  })
-  const [current, setCurrent] = useState(0)
-  const [comment, setComment] = useState('')
-  const [fileId, setFileId] = useState('')
-  if (query.isLoading) return <PageSkeleton />
-  if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
-  const submission = query.data.submissions[current]
-  if (!submission) return <EmptyState>{t('empty')}</EmptyState>
-  const activeFile = fileId || submission.files[0]?.id
-  return (
-    <div className="workspace-columns review-layout">
-      <section className="card space-y-3 p-4">
-        <h2 className="section-title">{t('reviewQueue')}</h2>
-        <div className="review-selector">
-          {query.data.submissions.map((item, index) => (
-            <button
-              key={item.id}
-              className="btn btn-ghost"
-              type="button"
-              aria-pressed={index === current}
-              onClick={() => { setCurrent(index); setFileId('') }}
-            >
-              {item.student?.account}
-            </button>
-          ))}
-        </div>
-      </section>
-      <div>{activeFile && <DocumentPreview fileId={activeFile} />}</div>
-      <form
-        className="card space-y-3 p-5"
-        onSubmit={async (event) => {
-          event.preventDefault()
-        }}
-      >
-        <div className="workspace-event inset-panel">
-          <span className="workspace-event-icon"><ClipboardCheck size={18} aria-hidden /></span>
-          <div>
-            <p className="text-sm text-muted">{submission.student?.account}</p>
-            <h2 className="text-xl font-bold tracking-tight">{locale === 'en' ? submission.student?.nameEn : submission.student?.nameZh}</h2>
-          </div>
-        </div>
-        <p className="font-medium">{locale === 'en' ? submission.threshold?.nameEn : submission.threshold?.nameZh}</p>
-        <p className="text-sm text-muted">
-          {locale === 'en' ? submission.recognizedItem?.nameEn : submission.recognizedItem?.nameZh} · {t('score')} {submission.scoreText || '—'} · {new Date(submission.createdAt).toLocaleString()}
-        </p>
-        {submission.note && <p className="rounded-xl bg-[#f6f7fb] px-3 py-2 text-sm">{submission.note}</p>}
-        <div className="flex flex-wrap gap-2">
-          {submission.files.map((file) => (
-            <button key={file.id} className={`btn px-2.5 py-1 ${activeFile === file.id ? 'btn-ink' : 'btn-ghost'}`} type="button" onClick={() => setFileId(file.id)}>
-              {file.originalName}
-            </button>
-          ))}
-        </div>
-        <label className="block text-sm font-medium">
-          {t('comment')}
-          <textarea className="field w-full" value={comment} onChange={(event) => setComment(event.target.value)} />
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="btn btn-pass"
-            type="button"
-            disabled={busy}
-            onClick={() => run(async () => {
-              await api(`/api/admin/reviews/${submission.id}`, { method: 'POST', body: { decision: 'APPROVED', comment }, success: t('saved') })
-              setComment('')
-              setCurrent(0)
-              await client.invalidateQueries({ queryKey: ['reviews'] })
-            })}
-          >
-            <PendingLabel pending={busy}>{t('approve')}</PendingLabel>
-          </button>
-          <button
-            className="btn btn-miss"
-            type="button"
-            disabled={busy}
-            onClick={() => run(async () => {
-              const ok = await confirm({ title: t('confirmTitle'), body: t('confirmReject'), confirm: t('reject'), danger: true })
-              if (!ok) return
-              await api(`/api/admin/reviews/${submission.id}`, { method: 'POST', body: { decision: 'REJECTED', comment }, success: t('saved') })
-              setComment('')
-              await client.invalidateQueries({ queryKey: ['reviews'] })
-            })}
-          >
-            <PendingLabel pending={busy}>{t('reject')}</PendingLabel>
-          </button>
-        </div>
-      </form>
     </div>
   )
 }
