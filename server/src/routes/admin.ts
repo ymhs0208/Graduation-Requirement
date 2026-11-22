@@ -560,26 +560,27 @@ router.post(
       .parse(req.body)
     const submission = await prisma.submission.findUnique({ where: { id: pid(req.params.id) }, include: { threshold: true } })
     if (!submission) throw new HttpError(404, 'NOT_FOUND')
-    await prisma.submission.update({
-      where: { id: submission.id },
-      data: {
-        status: body.decision,
-        reviewComment: body.comment || null,
-        reviewerId: req.userId,
-        reviewedAt: new Date(),
-      },
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.submission.updateMany({
+        where: { id: submission.id, status: 'PENDING' },
+        data: { status: body.decision, reviewComment: body.comment || null, reviewerId: req.userId, reviewedAt: new Date() },
+      })
+      if (!updated.count) throw new HttpError(409, 'REVIEW_ALREADY_COMPLETED', {
+        zh: '這筆證明已完成審核，請重新整理清單。', en: 'This evidence has already been reviewed. Refresh the queue.',
+      })
+      await audit({
+        actorId: req.userId, action: 'submission.review', entityType: 'submission', entityId: submission.id,
+        summaryZh: `${body.decision === 'APPROVED' ? '核可' : '退回'} ${submission.threshold.nameZh}`,
+        summaryEn: `${body.decision === 'APPROVED' ? 'Approved' : 'Rejected'} ${submission.threshold.nameEn}`,
+        before: { status: 'PENDING' }, after: { status: body.decision },
+      }, tx)
     })
-    await tellStudentReviewed(submission.studentId, body.decision === 'APPROVED', body.comment || '')
-    await audit({
-      actorId: req.userId,
-      action: 'submission.review',
-      entityType: 'submission',
-      entityId: submission.id,
-      summaryZh: `${body.decision === 'APPROVED' ? '核可' : '退回'} ${submission.threshold.nameZh}`,
-      summaryEn: `${body.decision === 'APPROVED' ? 'Approved' : 'Rejected'} ${submission.threshold.nameEn}`,
-      before: { status: submission.status },
-      after: { status: body.decision },
-    })
+    try {
+      await tellStudentReviewed(submission.studentId, body.decision === 'APPROVED', body.comment || '')
+    } catch (error) {
+      console.error('Review notification failed', submission.id, error instanceof Error ? error.name : '')
+      return res.json({ ok: true, notificationFailed: true })
+    }
     res.json({ ok: true })
   }),
 )

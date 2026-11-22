@@ -1,23 +1,28 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronRight, FileText, Undo2 } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, FileText, Search, Undo2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
 import { LoadError, PageSkeleton, PendingButton } from '../components/feedback'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState } from '../components/shell'
 import { ApiError, api, errorMessage } from '../lib/api'
+import { conditionDescription } from '../lib/conditions'
 import { useI18n } from '../lib/i18n'
 import { BatchImportLink } from './admin-batch-import'
 
 type Name = { nameZh: string; nameEn: string }
 type Submission = {
   id: string; scoreText: string | null; note: string | null; createdAt: string
-  threshold?: Name; recognizedItem?: Name | null; student?: Name & { account: string }
+  threshold?: Name & { code?: string; descriptionZh?: string; descriptionEn?: string }
+  recognizedItem?: (Name & { minScore?: number | null }) | null; student?: Name & { account: string }
+  teacherComment?: string | null
   files: { id: string; originalName: string }[]
 }
 type Queue = { submissions: Submission[] }
 type Decision = 'APPROVED' | 'REJECTED'
 const reviewKey = ['reviews']
+const reasons = ['reviewReasonBlurred', 'reviewReasonMissing', 'reviewReasonMismatch'] as const
+const thresholdKey = (item: Submission) => item.threshold?.code || item.threshold?.nameZh || ''
 
 export function AdminReviews() {
   const { t, locale } = useI18n()
@@ -29,24 +34,48 @@ export function AdminReviews() {
   const [fileId, setFileId] = useState('')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [decision, setDecision] = useState<Decision | null>(null)
+  const [search, setSearch] = useState('')
+  const [threshold, setThreshold] = useState({ key: '', title: '' })
   const [failure, setFailure] = useState<{ id: string; text: string; uncertain: boolean } | null>(null)
   const [success, setSuccess] = useState('')
+  const [notificationWarning, setNotificationWarning] = useState(false)
   const studentHeading = useRef<HTMLHeadingElement>(null)
   const successMessage = useRef<HTMLParagraphElement>(null)
-  useUnsaved(Object.values(drafts).some((comment) => comment.trim()))
+  useUnsaved(Object.entries(drafts).some(([id, comment]) =>
+    comment.trim() && (!query.data || query.data.submissions.some((item) => item.id === id)),
+  ))
 
   if (query.isLoading) return <PageSkeleton />
   if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
 
   const { submissions } = query.data
-  const submission = submissions.find((item) => item.id === selectedId) ?? submissions[0]
   const date = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Taipei' })
   const nameOf = (item?: Name | null) => item ? (locale === 'en' ? item.nameEn || item.nameZh : item.nameZh || item.nameEn) : ''
+  const thresholds = new Map(submissions.flatMap((item) => thresholdKey(item) ? [[thresholdKey(item), nameOf(item.threshold)]] : []))
+  if (threshold.key && !thresholds.has(threshold.key)) thresholds.set(threshold.key, threshold.title)
+  const term = search.trim().toLowerCase()
+  const queue = submissions.filter((item) => (!threshold.key || thresholdKey(item) === threshold.key) &&
+    (!term || [item.student?.account, item.student?.nameZh, item.student?.nameEn].some((value) => value?.toLowerCase().includes(term))))
+  const submission = queue.find((item) => item.id === selectedId) ?? queue[0]
+  const position = queue.findIndex((item) => item.id === submission?.id)
 
   function choose(id: string) {
     setSelectedId(id)
     setFileId('')
     setSuccess('')
+    setNotificationWarning(false)
+  }
+
+  function insertReason(item: Submission, reason: string) {
+    const comment = drafts[item.id]?.trim() ?? ''
+    if (comment.split('\n').includes(reason)) return
+    const next = [comment, reason].filter(Boolean).join('\n')
+    if (next.length > 1000) {
+      setFailure({ id: item.id, text: t('reviewCommentLong'), uncertain: false })
+      return
+    }
+    setDrafts((current) => ({ ...current, [item.id]: next }))
+    setFailure(null)
   }
 
   function review(item: Submission, nextDecision: Decision) {
@@ -59,9 +88,10 @@ export function AdminReviews() {
       })) return
       setFailure(null)
       setSuccess('')
+      setNotificationWarning(false)
       setDecision(nextDecision)
       try {
-        const result = await api<{ ok: boolean }>(`/api/admin/reviews/${item.id}`, {
+        const result = await api<{ ok: boolean; notificationFailed?: boolean }>(`/api/admin/reviews/${item.id}`, {
           body: { decision: nextDecision, comment: (drafts[item.id] ?? '').trim() },
           silent: true,
         })
@@ -75,13 +105,14 @@ export function AdminReviews() {
           delete updated[item.id]
           return updated
         })
-        const index = submissions.findIndex(({ id }) => id === item.id)
-        choose((submissions[index + 1] ?? submissions[index - 1])?.id ?? '')
+        const index = queue.findIndex(({ id }) => id === item.id)
+        choose((queue[index + 1] ?? queue[index - 1])?.id ?? '')
         setSuccess(t(nextDecision === 'APPROVED' ? 'reviewApproved' : 'reviewReturned'))
+        setNotificationWarning(Boolean(result.notificationFailed))
         requestAnimationFrame(() => (studentHeading.current ?? successMessage.current)?.focus())
       } catch (error) {
         const uncertain = !(error instanceof ApiError) || ['SERVER', 'OFFLINE', 'TIMEOUT'].includes(error.code)
-        setFailure({ id: item.id, text: uncertain ? t('reviewFailed') : errorMessage(error, locale, t('error')), uncertain })
+        setFailure({ id: item.id, text: uncertain ? t('reviewFailed') : errorMessage(error, locale, t('error')), uncertain: uncertain || (error instanceof ApiError && error.code === 'REVIEW_ALREADY_COMPLETED') })
       } finally {
         setDecision(null)
       }
@@ -90,29 +121,54 @@ export function AdminReviews() {
 
   const activeFile = submission?.files.find((file) => file.id === fileId) ?? submission?.files[0]
   const studentName = nameOf(submission?.student) || submission?.student?.account || t('studentRole')
+  const requirement = submission?.threshold
+  const criteria = requirement && conditionDescription({
+    code: requirement.code ?? '',
+    descriptionZh: requirement.descriptionZh ?? '',
+    descriptionEn: requirement.descriptionEn || requirement.descriptionZh || '',
+  }, locale, '')
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end"><BatchImportLink kind="reviews" /></div>
       {success && <p className="login-result login-result-success" role="status" tabIndex={-1} ref={successMessage}>{success}</p>}
-      {!submission ? <section className="card"><EmptyState>{t('reviewEmpty')}</EmptyState></section> : (
+      {notificationWarning && <p className="login-result" role="alert">{t('reviewNotificationFailed')}</p>}
+      {!submissions.length ? <section className="card"><EmptyState>{t('reviewEmpty')}</EmptyState></section> : (
         <div className="review-workspace">
           <section className="card review-queue" aria-labelledby="review-queue-title">
             <div className="review-queue-heading">
               <h2 className="section-title" id="review-queue-title">{t('reviewQueue')}</h2>
-              <span className="review-queue-count">{submissions.length}</span>
+              <span className="review-queue-count" role="status">{queue.length} / {submissions.length}</span>
             </div>
-            <div className="review-queue-picker">
+            <div className="review-queue-filters">
+              <label className="block text-sm font-semibold">{t('reviewSearch')}
+                <span className="account-search"><Search size={16} aria-hidden />
+                  <input type="search" className="field w-full" value={search} disabled={busy}
+                    onChange={(event) => { setSearch(event.target.value); choose('') }} />
+                </span>
+              </label>
+              <label className="block text-sm font-semibold">{t('graduationRequirements')}
+                <select className="field w-full" value={threshold.key} disabled={busy} onChange={(event) => {
+                  const key = event.target.value
+                  setThreshold({ key, title: thresholds.get(key) ?? '' })
+                  choose('')
+                }}>
+                  <option value="">{t('reviewAllRequirements')}</option>
+                  {[...thresholds].map(([key, title]) => <option key={key} value={key}>{title}</option>)}
+                </select>
+              </label>
+            </div>
+            {submission && <div className="review-queue-picker">
               <select aria-labelledby="review-queue-title" className="field w-full" value={submission.id} disabled={busy} onChange={(event) => choose(event.target.value)}>
-                {submissions.map((item) => <option key={item.id} value={item.id}>
+                {queue.map((item) => <option key={item.id} value={item.id}>
                   {[nameOf(item.student) || item.student?.account, nameOf(item.threshold)].filter(Boolean).join(' · ')}
                 </option>)}
               </select>
-            </div>
+            </div>}
             <ul className="review-queue-list">
-              {submissions.map((item) => (
+              {queue.map((item) => (
                 <li key={item.id}>
-                  <button type="button" aria-pressed={submission.id === item.id} disabled={busy} onClick={() => choose(item.id)}>
+                  <button type="button" aria-pressed={submission?.id === item.id} disabled={busy} onClick={() => choose(item.id)}>
                     <span className="min-w-0">
                       <strong className="block">{nameOf(item.student) || item.student?.account || t('studentRole')}</strong>
                       <span className="review-queue-meta">{[item.student?.account, nameOf(item.threshold)].filter(Boolean).join(' · ')}</span>
@@ -124,22 +180,39 @@ export function AdminReviews() {
             </ul>
           </section>
 
-          <div className="review-case">
+          {!submission ? <section className="card"><EmptyState>{t('reviewNoMatches')}</EmptyState></section> : <div className="review-case">
             <section className="card review-summary" aria-labelledby="review-student-name">
-              <div className="review-student">
-                <span className="workspace-avatar" aria-hidden="true">{Array.from(studentName)[0]}</span>
-                <div className="min-w-0">
-                  <h2 id="review-student-name" className="review-student-name" tabIndex={-1} ref={studentHeading}>{studentName}</h2>
-                  {submission.student?.account && <p className="text-sm text-muted">{submission.student.account}</p>}
+              <div className="review-case-heading">
+                <div className="review-student">
+                  <span className="workspace-avatar" aria-hidden="true">{Array.from(studentName)[0]}</span>
+                  <div className="min-w-0">
+                    <h2 id="review-student-name" className="review-student-name" tabIndex={-1} ref={studentHeading}>{studentName}</h2>
+                    {submission.student?.account && <p className="text-sm text-muted">{submission.student.account}</p>}
+                  </div>
                 </div>
+                {queue.length > 1 && <div className="review-navigation">
+                  <button type="button" className="btn btn-ghost" disabled={busy || position <= 0} onClick={() => choose(queue[position - 1].id)}>
+                    <ChevronLeft size={15} aria-hidden />{t('reviewPreviousCase')}
+                  </button>
+                  <span className="text-sm text-muted tabular-nums">{position + 1} / {queue.length}</span>
+                  <button type="button" className="btn btn-ghost" disabled={busy || position >= queue.length - 1} onClick={() => choose(queue[position + 1].id)}>
+                    {t('reviewNextCase')}<ChevronRight size={15} aria-hidden />
+                  </button>
+                </div>}
               </div>
               <dl className="review-facts">
                 {submission.threshold && <div><dt>{t('graduationRequirements')}</dt><dd>{nameOf(submission.threshold)}</dd></div>}
                 {submission.recognizedItem && <div><dt>{t('evidenceRecognizedItem')}</dt><dd>{nameOf(submission.recognizedItem)}</dd></div>}
                 {submission.scoreText && <div><dt>{t('score')}</dt><dd>{submission.scoreText}</dd></div>}
+                {submission.recognizedItem?.minScore != null && <div><dt>{t('recognizedMinimum')}</dt><dd>{submission.recognizedItem.minScore}</dd></div>}
                 <div><dt>{t('reviewSubmittedAt')}</dt><dd><time dateTime={submission.createdAt}>{date.format(new Date(submission.createdAt))}</time></dd></div>
               </dl>
+              {criteria && <details key={submission.id} className="review-note">
+                <summary className="cursor-pointer text-sm font-semibold">{t('reviewCriteria')}</summary>
+                <p>{criteria}</p>
+              </details>}
               {submission.note && <div className="review-note"><h3>{t('note')}</h3><p>{submission.note}</p></div>}
+              {submission.teacherComment && <div className="review-note"><h3>{t('reviewTeacherNote')}</h3><p>{submission.teacherComment}</p></div>}
             </section>
 
             <div className="review-case-columns">
@@ -168,6 +241,12 @@ export function AdminReviews() {
                       placeholder={t('reviewCommentHint')}
                       onChange={(event) => setDrafts((current) => ({ ...current, [submission.id]: event.target.value }))} />
                   </div>
+                  <label className="block text-sm font-semibold">{t('reviewQuickReason')}
+                    <select className="field w-full" value="" onChange={(event) => { if (event.target.value) insertReason(submission, event.target.value) }}>
+                      <option value="">{t('reviewChooseReason')}</option>
+                      {reasons.map((reason) => <option key={reason} value={t(reason)}>{t(reason)}</option>)}
+                    </select>
+                  </label>
                   {failure?.id === submission.id && <div className="space-y-2">
                     <p className="login-result" role="alert">{failure.text}</p>
                     {failure.uncertain && <PendingButton className="btn btn-ghost" type="button" pending={query.isFetching}
@@ -182,7 +261,7 @@ export function AdminReviews() {
                 </fieldset>
               </form>
             </div>
-          </div>
+          </div>}
         </div>
       )}
     </div>

@@ -137,6 +137,12 @@ describe('authorization', () => {
       .set('x-csrf-token', admin.csrf)
       .send({ decision: 'APPROVED', comment: '600 分，達到 550。' })
     expect(decided.status).toBe(200)
+    const duplicate = await admin.agent
+      .post(`/api/admin/reviews/${pending.id}`)
+      .set('x-csrf-token', admin.csrf)
+      .send({ decision: 'REJECTED', comment: '不應覆蓋原審核結果。' })
+    expect(duplicate.status).toBe(409)
+    expect(duplicate.body.error).toBe('REVIEW_ALREADY_COMPLETED')
     const student = await login('B11523001', DEMO_PASSWORD.student)
     const dashboard = await student.agent.get('/api/me/dashboard')
     const english = dashboard.body.progress.thresholds.find((item: { code: string }) => item.code === 'ENGLISH')
