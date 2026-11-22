@@ -528,6 +528,15 @@
 .inset-panel { border: 1px solid #e2e8f1; border-radius: .8rem; background: #f6f8fc; padding: .85rem 1rem; }
 .tag { display: inline-flex; align-items: center; border-radius: .4rem; background: #eaf0fb; color: #284c81; padding: .15rem .5rem; font-size: .72rem; font-weight: 700; }
 .workspace-event { display: flex; align-items: flex-start; gap: .8rem; padding: 1rem 1.1rem; overflow-wrap: anywhere; }
+.batch-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: .6rem; }
+.batch-counts > div { padding: .55rem .7rem; border: 1px solid var(--color-line); border-radius: .55rem; }
+.batch-counts dt { font-size: .8rem; color: var(--color-muted); }
+.batch-counts dd { color: var(--color-pine); font-weight: 700; font-variant-numeric: tabular-nums; }
+.batch-table { min-width: 34rem; }
+.batch-table td { vertical-align: top; overflow-wrap: anywhere; }
+.batch-table td:last-child { width: 52%; }
+.batch-code-list { display: grid; gap: .65rem; margin-top: .6rem; }
+.batch-code-list li { display: grid; gap: .24rem .7rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); }
 .audit-toolbar { display: grid; gap: .85rem; padding: clamp(.9rem, 2.4vw, 1.35rem); }
 .audit-toolbar-heading, .audit-results, .audit-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .35rem 1rem; }
 .audit-filters { display: grid; max-width: 43rem; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); align-items: end; gap: .65rem 1rem; }

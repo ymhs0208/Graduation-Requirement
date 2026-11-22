@@ -49,10 +49,10 @@ const links = {
 const navIcons = {
   overview: LayoutDashboard, plan: CalendarDays, evidence: FileUp, notifications: Bell,
   help: CircleHelp, classes: UsersRound, stats: ChartNoAxesColumnIncreasing, reviews: ClipboardCheck,
-  users: UsersRound, rules: BookOpen, managePlan: CalendarDays, recognized: Shield, announcements: Megaphone, audit: History, retention: Trash2, passkeySettings: KeyRound,
+  users: UsersRound, rules: BookOpen, managePlan: CalendarDays, recognized: Shield, announcements: Megaphone, audit: History, retention: Trash2, passkeySettings: KeyRound, importTitle: FileUp,
 }
 
-const pageTitles = [...links.STUDENT, ...links.TEACHER, ...links.ADMIN, ['/admin/security', 'passkeySettings'] as const]
+const pageTitles = [...links.STUDENT, ...links.TEACHER, ...links.ADMIN, ['/admin/security', 'passkeySettings'] as const, ['/admin/import/:kind', 'importTitle'] as const]
 const roleLabels = { STUDENT: 'studentRole', TEACHER: 'teacherRole', ADMIN: 'adminRole' } as const
 
 export function SkipLink() {

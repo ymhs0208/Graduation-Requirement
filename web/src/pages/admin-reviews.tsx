@@ -7,6 +7,7 @@ import { DocumentPreview } from '../components/preview'
 import { EmptyState } from '../components/shell'
 import { ApiError, api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { BatchImportLink } from './admin-batch-import'
 
 type Name = { nameZh: string; nameEn: string }
 type Submission = {
@@ -92,6 +93,7 @@ export function AdminReviews() {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end"><BatchImportLink kind="reviews" /></div>
       {success && <p className="login-result login-result-success" role="status" tabIndex={-1} ref={successMessage}>{success}</p>}
       {!submission ? <section className="card"><EmptyState>{t('reviewEmpty')}</EmptyState></section> : (
         <div className="review-workspace">

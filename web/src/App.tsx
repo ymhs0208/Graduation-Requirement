@@ -15,6 +15,7 @@ import { I18nProvider, useI18n } from './lib/i18n'
 import { AdminStats } from './pages/admin'
 import { AdminAudit } from './pages/admin-audit'
 import { AdminReviews } from './pages/admin-reviews'
+import { AdminBatchImport } from './pages/admin-batch-import'
 import { AdminRetention } from './pages/admin-retention'
 import { AdminRecognized } from './pages/admin-recognized'
 import { AdminRules } from './pages/admin-rules'
@@ -430,6 +431,7 @@ function Gate() {
         <Route path="/admin" element={user.role === 'ADMIN' ? <AdminStats /> : <Navigate to={home} replace />} />
         <Route path="/admin/reviews" element={user.role === 'ADMIN' ? <AdminReviews /> : <Navigate to={home} replace />} />
         <Route path="/admin/users" element={user.role === 'ADMIN' ? <AdminUsers /> : <Navigate to={home} replace />} />
+        <Route path="/admin/import/:kind" element={user.role === 'ADMIN' ? <AdminBatchImport /> : <Navigate to={home} replace />} />
         <Route path="/admin/rules" element={user.role === 'ADMIN' ? <AdminRules /> : <Navigate to={home} replace />} />
         <Route path="/admin/plan" element={user.role === 'ADMIN' ? <AdminPlan /> : <Navigate to={home} replace />} />
         <Route path="/admin/announcements" element={user.role === 'ADMIN' ? <AdminAnnouncements /> : <Navigate to={home} replace />} />

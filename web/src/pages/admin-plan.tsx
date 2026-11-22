@@ -7,6 +7,7 @@ import { EmptyState } from '../components/shell'
 import { api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { planRequirements, planTerms, sortPlan, type PlanCourse } from '../lib/plan'
+import { BatchImportLink } from './admin-batch-import'
 
 const blank = {
   studyYear: 1, term: 'FIRST' as PlanCourse['term'], requirementType: 'MAJOR_REQUIRED' as PlanCourse['requirementType'],
@@ -103,7 +104,10 @@ export function AdminPlan() {
             {cohorts.data.cohorts.map((item) => <option key={item.cohortYear} value={item.cohortYear}>{item.cohortYear}</option>)}
           </select>
         </label>
-        {!editor && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => open('new')}><Plus size={17} aria-hidden />{t('planAddCourse')}</button>}
+        {!editor && <div className="flex flex-wrap gap-2">
+          <BatchImportLink kind="courses" cohort={selected} />
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => open('new')}><Plus size={17} aria-hidden />{t('planAddCourse')}</button>
+        </div>}
       </section>
       {notice && <p className="login-result login-result-success" role="status">{notice}</p>}
       {message && !editor && <p className="login-result" role="alert">{message}</p>}

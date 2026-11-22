@@ -6,6 +6,7 @@ import { PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
 import { api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { BatchImportLink } from './admin-batch-import'
 
 const categories = {
   ENGLISH: { title: 'englishItem', Icon: BookOpen },
@@ -142,9 +143,12 @@ export function AdminRecognized() {
         <header className="panel-heading">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="section-title">{t('recognizedItems')}</h2>
-            {!editor && <button ref={addButton} type="button" className="btn btn-primary" disabled={busy} onClick={() => openEditor('new')}>
-              <Plus size={17} aria-hidden />{t('addRecognized')}
-            </button>}
+            {!editor && <div className="flex flex-wrap gap-2">
+              <BatchImportLink kind="recognized" />
+              <button ref={addButton} type="button" className="btn btn-primary" disabled={busy} onClick={() => openEditor('new')}>
+                <Plus size={17} aria-hidden />{t('addRecognized')}
+              </button>
+            </div>}
           </div>
           <div className="account-filters">
             <label className="text-sm font-semibold">{t('recognizedSearch')}

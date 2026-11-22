@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import planRoutes from './admin-plan'
+import batchRoutes from './admin-batches'
 import { randomUUID } from 'node:crypto'
 import multer from 'multer'
 import { stringify } from 'csv-stringify/sync'
@@ -20,6 +21,7 @@ const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 
 const router = Router()
 router.use(requireUser, requireRole('ADMIN'))
 router.use('/plans', planRoutes)
+router.use('/batch-imports', batchRoutes)
 
 const accountSchema = z.string().trim().min(1).max(20)
 

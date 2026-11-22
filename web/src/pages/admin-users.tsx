@@ -7,6 +7,7 @@ import { EmptyState } from '../components/shell'
 import { ApiError, api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { ImportPanel } from './import-panel'
+import { BatchImportLink } from './admin-batch-import'
 
 const roles = { STUDENT: 'studentRole', TEACHER: 'teacherRole', ADMIN: 'adminRole' } as const
 const accountTypes = {
@@ -125,6 +126,7 @@ export function AdminUsers() {
             <h2 ref={directoryHeading} tabIndex={-1} className="section-title">{t('accountList')}</h2>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-ghost" onClick={() => open('import')}><FileUp size={17} aria-hidden />{t('importTitle')}</button>
+              <BatchImportLink kind="classes" />
               {(Object.entries(accountTypes) as [Role, (typeof accountTypes)[Role]][]).map(([role, { title, Icon }]) => (
                 <button key={role} type="button" className={`btn ${role === 'ADMIN' ? 'btn-ghost' : 'btn-primary'}`} onClick={() => open(role)}>
                   <Icon size={17} aria-hidden />{t(title)}
