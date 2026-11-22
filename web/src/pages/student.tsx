@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ArrowRight, Bell, CalendarDays, ChevronDown, Clock, FileUp, ListChecks, Megaphone } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { PageSkeleton, PendingLabel, TableSkeleton } from '../components/feedback'
+import { LoadError, PageSkeleton, PendingLabel, TableSkeleton } from '../components/feedback'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { conditionDescription } from '../lib/conditions'
@@ -220,7 +220,8 @@ export function NotificationsPage({ canPublish }: { canPublish: boolean }) {
     queryKey: ['notes'],
     queryFn: () => api<{ notifications: { id: string; kind: string; titleZh: string; titleEn: string; bodyZh: string; bodyEn: string; readAt: string | null; createdAt: string }[] }>('/api/inbox'),
   })
-  if (query.isLoading || !query.data) return query.isLoading ? <TableSkeleton /> : <p className="text-sm text-muted">{t('loading')}</p>
+  if (query.isLoading) return <TableSkeleton />
+  if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
   return (
     <div className="space-y-3">
       {canPublish && <Link className="btn btn-primary" to="/admin/announcements"><Megaphone size={17} aria-hidden />{t('announcementCompose')}</Link>}

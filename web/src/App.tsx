@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ConfirmProvider } from './components/confirm'
-import { ConnectionBanner, PageSkeleton, PendingButton, RouteProgress } from './components/feedback'
+import { ConnectionBanner, LoadError, PageSkeleton, PendingButton, RouteProgress } from './components/feedback'
 import { Toaster } from 'sonner'
 import { Shell, SiteFooter, SkipLink, type SessionUser } from './components/shell'
 import { ApiError, errorMessage, api, onSessionLost } from './lib/api'
@@ -284,14 +284,25 @@ function ResetPage() {
   )
 }
 
-function TotpPage() {
-  const { t } = useI18n()
-  const [secret, setSecret] = useState('')
+function TotpPage({ userId }: { userId: string }) {
+  const { t, locale } = useI18n()
+  const setup = useQuery({
+    queryKey: ['totp-setup', userId],
+    queryFn: async () => {
+      const data = await api<{ secret: string }>('/api/auth/totp/setup', { method: 'POST', body: {}, silent: true })
+      if (!data.secret) throw new ApiError('SERVER')
+      return data
+    },
+    networkMode: 'always',
+    retry: false,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+  const secret = setup.data?.secret
   const [token, setToken] = useState('')
   const [pending, setPending] = useState(false)
-  useEffect(() => {
-    api<{ secret: string }>('/api/auth/totp/setup', { method: 'POST', body: {} }).then((data) => setSecret(data.secret))
-  }, [])
+  const [message, setMessage] = useState('')
   return (
     <AccountFrame title={t('setupTotp')} description={t('totpSetupGuide')}>
       <form
@@ -299,20 +310,26 @@ function TotpPage() {
       onSubmit={async (event) => {
         event.preventDefault()
         setPending(true)
+        setMessage('')
         try {
-          await api('/api/auth/totp/enable', { method: 'POST', body: { token }, success: t('saved') })
+          await api('/api/auth/totp/enable', { method: 'POST', body: { token }, silent: true })
           window.location.href = '/'
+        } catch (error) {
+          setMessage(errorMessage(error, locale, t('error')))
         } finally {
           setPending(false)
         }
       }}
       >
-        <div className="inset-panel">
+        {setup.isPending && setup.isFetching && <p role="status">{t('loading')}</p>}
+        {setup.isError && <LoadError pending={setup.isFetching} onRetry={() => void setup.refetch()} />}
+        {secret && !setup.isError && <div className="inset-panel">
           <p className="text-xs font-semibold text-muted">{t('verificationKey')}</p>
-          <p className="mt-1 break-all font-mono text-sm">{secret || '—'}</p>
-        </div>
+          <p className="mt-1 break-all font-mono text-sm">{secret}</p>
+        </div>}
         <label className="block text-sm font-semibold">{t('totp')}<input className="field w-full" inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" value={token} onChange={(event) => setToken(event.target.value.replace(/\D/g, '').slice(0, 6))} /></label>
-        <PendingButton className="btn btn-primary w-full" type="submit" pending={pending} disabled={!secret}>
+        {message && <p className="login-result" role="alert">{message}</p>}
+        <PendingButton className="btn btn-primary w-full" type="submit" pending={pending} disabled={!secret || setup.isError || setup.isFetching}>
           {t('enableVerification')}
         </PendingButton>
       </form>
@@ -366,14 +383,15 @@ function Gate() {
     </AccountFrame>
   )
   if (user.mustChangePassword) return <PasswordPage />
-  if (user.role === 'ADMIN' && !user.totpEnabled) return <TotpPage />
+  if (user.role === 'ADMIN' && !user.totpEnabled) return <TotpPage userId={user.id} />
   const home = user.role === 'ADMIN' ? '/admin' : user.role === 'TEACHER' ? '/teacher' : '/'
   return (
     <Shell
       user={user}
       onLocale={async (locale) => {
-        setLocale(locale)
         await api('/api/auth/locale', { method: 'PATCH', body: { locale } })
+        client.setQueryData<Me>(['me'], (current) => current && { ...current, user: { ...current.user, locale } })
+        setLocale(locale)
       }}
     >
       <Routes>

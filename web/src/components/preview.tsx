@@ -3,6 +3,7 @@ import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-d
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useI18n } from '../lib/i18n'
 import { fetchAuthenticatedFile } from '../lib/api'
+import { LoadError } from './feedback'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -12,6 +13,7 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [image, setImage] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
   const [zoom, setZoom] = useState(1.1)
@@ -37,9 +39,11 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
         if (cancelled) return
         setPages(doc.numPages)
         setPdf(doc)
-      } else {
-        imageUrl = URL.createObjectURL(new Blob([bytes], { type: mime || 'application/octet-stream' }))
+      } else if (/^image\/(png|jpeg)\b/.test(mime)) {
+        imageUrl = URL.createObjectURL(new Blob([bytes], { type: mime }))
         setImage(imageUrl)
+      } else {
+        setError('preview')
       }
     })().catch(() => {
       if (!cancelled) setError('preview')
@@ -48,7 +52,7 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
       cancelled = true
       if (imageUrl) URL.revokeObjectURL(imageUrl)
     }
-  }, [fileId])
+  }, [fileId, attempt])
 
   useEffect(() => {
     if (!pdf || !canvasRef.current) return
@@ -63,7 +67,7 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
       canvas.width = viewport.width
       canvas.height = viewport.height
       await pdfPage.render({ canvas, canvasContext: context, viewport }).promise
-    })().catch(() => setError('preview'))
+    })().catch(() => { if (!cancelled) setError('preview') })
     return () => {
       cancelled = true
     }
@@ -94,9 +98,10 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
         )}
       </div>
       <div className="flex-1 overflow-auto p-4">
-        {error && <p className="text-sm font-medium text-[#9e1d22]" role="alert">{t('error')}</p>}
-        {image && <img alt={t('preview')} src={image} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="rounded-lg bg-white shadow-md" />}
-        <canvas ref={canvasRef} role="img" aria-label={t('preview')} className={pdf ? 'rounded-lg bg-white shadow-md' : 'hidden'} />
+        {error && <LoadError message={t('previewFailed')} onRetry={() => setAttempt((value) => value + 1)} />}
+        {!error && !image && !pdf && <p role="status">{t('loading')}</p>}
+        {!error && image && <img alt={t('preview')} src={image} onError={() => setError('preview')} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="rounded-lg bg-white shadow-md" />}
+        <canvas ref={canvasRef} role="img" aria-label={t('preview')} className={pdf && !error ? 'rounded-lg bg-white shadow-md' : 'hidden'} />
       </div>
     </section>
   )

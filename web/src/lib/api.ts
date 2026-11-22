@@ -57,8 +57,7 @@ export function errorMessage(error: unknown, locale: 'zh-Hant' | 'en', fallback:
 
 function toastText(error: ApiError) {
   const english = document.documentElement.lang === 'en'
-  if (error.code === 'OFFLINE' || error.code === 'TIMEOUT') return english ? 'Connection lost. Try again.' : '連線中斷，請重試'
-  return (english ? error.messageEn : error.messageZh) || error.code
+  return errorMessage(error, english ? 'en' : 'zh-Hant', english ? 'Something went wrong. Please try again.' : '操作未能完成，請再試一次。')
 }
 
 type Options = {
@@ -152,20 +151,13 @@ function xhr<T>(path: string, options: Options & { method: string; timeout: numb
       settled = true
       window.clearTimeout(timer)
       options.signal?.removeEventListener('abort', onAbort)
-      let payload: { error?: string; messageZh?: string; messageEn?: string; csrfToken?: string } = {}
       try {
-        payload = request.responseText ? JSON.parse(request.responseText) : {}
-      } catch {
-        reject(new ApiError('SERVER'))
-        return
+        const data = parsePayload<T>(request.responseText, request.status)
+        options.onProgress?.(100)
+        resolve(data)
+      } catch (error) {
+        reject(error)
       }
-      if (request.status < 200 || request.status >= 300) {
-        reject(new ApiError(payload.error ?? 'SERVER', payload.messageZh, payload.messageEn))
-        return
-      }
-      if (payload.csrfToken) setCsrf(payload.csrfToken)
-      options.onProgress?.(100)
-      resolve(payload as T)
     }
     request.onerror = () => {
       if (settled) return
@@ -188,9 +180,27 @@ function xhr<T>(path: string, options: Options & { method: string; timeout: numb
 }
 
 async function readPayload<T>(response: Response): Promise<T> {
-  const text = await response.text()
-  const data = text ? JSON.parse(text) : {}
-  if (!response.ok) throw new ApiError(data.error ?? 'SERVER', data.messageZh, data.messageEn)
-  if (data.csrfToken) setCsrf(data.csrfToken)
+  return parsePayload<T>(await response.text(), response.status)
+}
+
+function parsePayload<T>(text: string, status: number): T {
+  const fallback = status === 401 ? 'UNAUTHENTICATED' : status === 403 ? 'FORBIDDEN'
+    : status === 404 ? 'NOT_FOUND' : status === 413 ? 'FILE_SIZE' : 'SERVER'
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new ApiError(fallback)
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data) || !Object.keys(data).length) throw new ApiError(fallback)
+  const payload = data as Record<string, unknown>
+  if (status < 200 || status >= 300 || typeof payload.error === 'string') {
+    throw new ApiError(
+      typeof payload.error === 'string' ? payload.error : fallback,
+      typeof payload.messageZh === 'string' ? payload.messageZh : undefined,
+      typeof payload.messageEn === 'string' ? payload.messageEn : undefined,
+    )
+  }
+  if (typeof payload.csrfToken === 'string') setCsrf(payload.csrfToken)
   return data as T
 }

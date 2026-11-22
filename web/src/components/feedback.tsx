@@ -89,6 +89,16 @@ export function TableSkeleton() {
   )
 }
 
+export function LoadError({ onRetry, pending, message }: { onRetry: () => void; pending?: boolean; message?: string }) {
+  const { t } = useI18n()
+  return (
+    <div className="card space-y-3 p-4">
+      <p role="alert" className="login-result">{message ?? t('loadFailed')}</p>
+      <PendingButton type="button" className="btn btn-ghost" pending={pending} onClick={onRetry}>{t('tryAgain')}</PendingButton>
+    </div>
+  )
+}
+
 export function RouteProgress() {
   const { t } = useI18n()
   const location = useLocation()

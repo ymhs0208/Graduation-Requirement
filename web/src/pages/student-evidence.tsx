@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Check, ClipboardList, CloudUpload, FileText, FileUp, Paperclip, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLock, useUnsaved } from '../components/confirm'
-import { PageSkeleton, PendingButton, UploadProgress } from '../components/feedback'
+import { LoadError, PageSkeleton, PendingButton, UploadProgress } from '../components/feedback'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
 import { ApiError, api, errorMessage } from '../lib/api'
@@ -52,12 +52,7 @@ export function EvidencePage() {
   useEffect(() => { if (tab === 'upload') stepTitle.current?.focus() }, [step, tab])
 
   if (query.isLoading) return <PageSkeleton />
-  if (!query.data) return (
-    <section className="card p-5">
-      <p className="text-sm text-muted" role="alert">{t('loadFailed')}</p>
-      <button className="btn btn-ghost mt-3" type="button" onClick={() => void query.refetch()}>{t('tryAgain')}</button>
-    </section>
-  )
+  if (!query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
 
   const { progress, recognized, submissions } = query.data
   const thresholds = progress.thresholds.filter((item) =>
@@ -84,9 +79,13 @@ export function EvidencePage() {
     <div className="space-y-4">
       <div className="evidence-tabs" role="group" aria-label={t('evidence')}>
         {tabs.map(([value, label, Icon]) => (
-          <button key={value} type="button" aria-pressed={tab === value} disabled={busy} onClick={() => { setTab(value); setSubmitted(false) }}>
+          <button key={value} type="button" aria-pressed={tab === value} disabled={busy} onClick={() => {
+            setTab(value)
+            setSubmitted(false)
+            if (value === 'history') void query.refetch()
+          }}>
             <Icon size={18} aria-hidden />{t(label)}
-            {value === 'history' && <span className="evidence-tab-count">{submissions.length}</span>}
+            {value === 'history' && !query.isError && <span className="evidence-tab-count">{submissions.length}</span>}
           </button>
         ))}
       </div>
@@ -115,7 +114,8 @@ export function EvidencePage() {
             uploadAbort.current = controller
             setPercent(0)
             try {
-              await api('/api/me/submissions', { method: 'POST', form: data, onProgress: setPercent, signal: controller.signal, silent: true })
+              const result = await api<{ id?: string }>('/api/me/submissions', { method: 'POST', form: data, onProgress: setPercent, signal: controller.signal, silent: true })
+              if (typeof result.id !== 'string' || !result.id.trim()) throw new ApiError('SERVER')
               setThresholdId('')
               setItemId('')
               setScore('')
@@ -127,7 +127,11 @@ export function EvidencePage() {
               setSubmitted(true)
               await client.invalidateQueries({ queryKey: ['dashboard'] })
             } catch (error) {
-              setMessage(error instanceof ApiError && error.code === 'CANCELLED' ? t('evidenceCancelled') : errorMessage(error, locale, t('error')))
+              const code = error instanceof ApiError ? error.code : ''
+              if (code === 'CANCELLED') setMessage(t('evidenceCancelled'))
+              else if (['OFFLINE', 'TIMEOUT', 'SERVER'].includes(code)) setMessage(t('evidenceUnconfirmed'))
+              else if (code === 'FILE_SIZE') setMessage(t('uploadTooBig'))
+              else setMessage(errorMessage(error, locale, t('evidenceFailed')))
             } finally {
               uploadAbort.current = null
               setPercent(null)
@@ -233,7 +237,9 @@ export function EvidencePage() {
           </section>
         </form>
       ))}
-      {tab === 'history' && (
+      {tab === 'history' && (query.isFetching ? <PageSkeleton /> : query.isError ? (
+        <LoadError message={t('evidenceHistoryFailed')} onRetry={() => void query.refetch()} />
+      ) : (
         <div className="evidence-workspace">
           <section className="card min-w-0">
             <h2 className="section-title panel-heading">{t('submissionHistory')}</h2>
@@ -267,7 +273,7 @@ export function EvidencePage() {
             <div className="px-4 pb-4">{preview ? <DocumentPreview fileId={preview.id} /> : <EmptyState>{t('advisorChooseFile')}</EmptyState>}</div>
           </section>}
         </div>
-      )}
+      ))}
     </div>
   )
 }

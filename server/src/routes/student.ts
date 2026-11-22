@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../db'
 import { audit } from '../audit'
 import { HttpError } from '../errors'
-import { displayUploadName, evidenceUploadName, saveUpload } from '../files'
+import { displayUploadName, evidenceUploadName, removeStored, saveUpload } from '../files'
 import { asyncHandler, requireRole, requireUser, type AuthedRequest } from '../http'
 import { notify } from '../mail'
 import { progressFor } from '../progress'
@@ -94,33 +94,42 @@ router.post(
     const files = (req.files as Express.Multer.File[] | undefined) ?? []
     if (!files.length) throw new HttpError(400, 'FILE_TYPE')
     const uploadedAt = new Date()
-    const stored = []
-    for (const [index, file] of files.entries()) {
-      const saved = await saveUpload(file.buffer)
-      if (!saved) throw new HttpError(400, 'FILE_TYPE')
-      const originalName = evidenceUploadName(user.account, threshold.nameZh, uploadedAt, index + 1, saved.ext)
-      stored.push({ storageKey: saved.storageKey, originalName, mimeType: saved.mime, size: saved.size })
+    const stored: { storageKey: string; originalName: string; mimeType: string; size: number }[] = []
+    let id: string
+    try {
+      for (const [index, file] of files.entries()) {
+        const saved = await saveUpload(file.buffer)
+        if (!saved) throw new HttpError(400, 'FILE_TYPE')
+        const originalName = evidenceUploadName(user.account, threshold.nameZh, uploadedAt, index + 1, saved.ext)
+        stored.push({ storageKey: saved.storageKey, originalName, mimeType: saved.mime, size: saved.size })
+      }
+      id = await prisma.$transaction(async (tx) => {
+        const submission = await tx.submission.create({
+          data: {
+            studentId: user.id,
+            thresholdId: threshold.id,
+            recognizedItemId: recognized?.id,
+            scoreText: body.scoreText || null,
+            note: body.note || null,
+            files: { create: stored },
+          },
+          select: { id: true },
+        })
+        await audit({
+          actorId: user.id,
+          action: 'submission.create',
+          entityType: 'submission',
+          entityId: submission.id,
+          summaryZh: `上傳 ${threshold.nameZh} 證明`,
+          summaryEn: `Uploaded evidence for ${threshold.nameEn}`,
+        }, tx)
+        return submission.id
+      })
+    } catch (error) {
+      await Promise.all(stored.map(({ storageKey }) => removeStored(storageKey).catch((cleanupError) => console.error(cleanupError))))
+      throw error
     }
-    const submission = await prisma.submission.create({
-      data: {
-        studentId: user.id,
-        thresholdId: threshold.id,
-        recognizedItemId: recognized?.id,
-        scoreText: body.scoreText || null,
-        note: body.note || null,
-        files: { create: stored },
-      },
-      include: { files: true },
-    })
-    await audit({
-      actorId: user.id,
-      action: 'submission.create',
-      entityType: 'submission',
-      entityId: submission.id,
-      summaryZh: `上傳 ${threshold.nameZh} 證明`,
-      summaryEn: `Uploaded evidence for ${threshold.nameEn}`,
-    })
-    res.status(201).json({ id: submission.id })
+    res.status(201).json({ id })
   }),
 )
 

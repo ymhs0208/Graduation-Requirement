@@ -112,10 +112,12 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     })
   }
   const multerCode = typeof err === 'object' && err && 'code' in err ? String((err as { code: string }).code) : ''
-  if (multerCode === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'FILE_SIZE' })
-  if (multerCode.startsWith('LIMIT_')) return res.status(400).json({ error: 'VALIDATION' })
+  if (multerCode.startsWith('LIMIT_')) {
+    const code = multerCode === 'LIMIT_FILE_SIZE' ? 'FILE_SIZE' : 'VALIDATION'
+    return res.status(400).json({ error: code, messageZh: messages[code].zh, messageEn: messages[code].en })
+  }
   console.error(err)
-  return res.status(500).json({ error: 'SERVER' })
+  return res.status(500).json({ error: 'SERVER', messageZh: messages.SERVER.zh, messageEn: messages.SERVER.en })
 }
 
 export function pid(value: string | string[] | undefined) {

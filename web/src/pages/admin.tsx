@@ -5,7 +5,7 @@ import { useConfirm, useLock } from '../components/confirm'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
 import { api, errorMessage, fetchAuthenticatedFile } from '../lib/api'
-import { PageSkeleton, PendingLabel, StepStatus } from '../components/feedback'
+import { LoadError, PageSkeleton, PendingLabel, StepStatus } from '../components/feedback'
 import { useI18n } from '../lib/i18n'
 
 export function AdminStats() {
@@ -20,7 +20,9 @@ export function AdminStats() {
   const { busy, run } = useLock()
   const [job, setJob] = useState<'export' | 'preaudit' | ''>('')
   const [step, setStep] = useState(-1)
-  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
+  const [message, setMessage] = useState('')
+  if (query.isLoading) return <PageSkeleton />
+  if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
   const stats = query.data.stats
   return (
     <div className="space-y-5">
@@ -40,14 +42,16 @@ export function AdminStats() {
           type="button"
           disabled={busy}
           onClick={() => run(async () => {
+            setMessage('')
             setJob('export')
             setStep(0)
             try {
               const response = await fetchAuthenticatedFile(`/api/admin/export?cohort=${query.data?.cohortYear}`)
               if (response.status === 401) return
-              if (!response.ok) throw new Error('export')
+              if (!response.ok || !response.headers.get('content-type')?.startsWith('text/csv')) throw new Error('export')
               setStep(1)
               const blob = await response.blob()
+              if (!blob.size) throw new Error('export')
               const url = URL.createObjectURL(blob)
               const link = document.createElement('a')
               link.href = url
@@ -57,6 +61,9 @@ export function AdminStats() {
               setStep(2)
               const { toast } = await import('sonner')
               toast.success(t('exportDone'))
+            } catch {
+              setMessage(t('exportFailed'))
+              setStep(-1)
             } finally {
               window.setTimeout(() => { setJob(''); setStep(-1) }, 900)
             }
@@ -70,13 +77,17 @@ export function AdminStats() {
           disabled={busy}
           onClick={() => run(async () => {
             if (!await confirm({ title: t('preaudit'), body: t('preauditConfirm'), confirm: t('preaudit') })) return
+            setMessage('')
             setJob('preaudit')
             setStep(0)
             try {
-              await api('/api/admin/preaudit', { method: 'POST', body: { cohortYear: query.data?.cohortYear }, success: t('preauditDone'), timeout: 60000 })
+              await api('/api/admin/preaudit', { method: 'POST', body: { cohortYear: query.data?.cohortYear }, success: t('preauditDone'), timeout: 60000, silent: true })
               setStep(1)
               await client.invalidateQueries({ queryKey: ['notes'] })
               setStep(2)
+            } catch (error) {
+              setMessage(errorMessage(error, locale, t('error')))
+              setStep(-1)
             } finally {
               window.setTimeout(() => { setJob(''); setStep(-1) }, 900)
             }
@@ -85,6 +96,7 @@ export function AdminStats() {
           <PendingLabel pending={busy && job === 'preaudit'}>{t('preaudit')}</PendingLabel>
         </button>
       </div>
+      {message && <p role="alert" className="login-result">{message}</p>}
       {job === 'export' && step >= 0 && <StepStatus steps={[t('stepExport'), t('stepDownload'), t('stepDone')]} current={step} />}
       {job === 'preaudit' && step >= 0 && <StepStatus steps={[t('stepScan'), t('stepNotify'), t('stepDone')]} current={step} />}
       {stats && (
@@ -169,7 +181,8 @@ export function AdminReviews() {
   const [current, setCurrent] = useState(0)
   const [comment, setComment] = useState('')
   const [fileId, setFileId] = useState('')
-  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
+  if (query.isLoading) return <PageSkeleton />
+  if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
   const submission = query.data.submissions[current]
   if (!submission) return <EmptyState>{t('empty')}</EmptyState>
   const activeFile = fileId || submission.files[0]?.id
@@ -262,7 +275,8 @@ export function AdminAudit() {
     queryKey: ['audit'],
     queryFn: () => api<{ logs: { id: string; action: string; summaryZh: string; summaryEn: string; createdAt: string; actor: { account: string } | null }[] }>('/api/admin/audit'),
   })
-  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
+  if (query.isLoading) return <PageSkeleton />
+  if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
   const term = search.trim().toLowerCase()
   const logs = query.data.logs.filter((log) =>
     [log.summaryZh, log.summaryEn, log.action, log.actor?.account ?? 'system'].some((value) => value.toLowerCase().includes(term)),
