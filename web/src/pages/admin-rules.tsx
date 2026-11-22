@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil } from 'lucide-react'
+import { ClipboardCheck, GraduationCap, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
-import { PageSkeleton, PendingButton } from '../components/feedback'
+import { LoadError, PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
-import { api, errorMessage } from '../lib/api'
+import { ApiError, api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import type { Condition } from '../lib/conditions'
 import { RuleConditions } from './rule-conditions'
@@ -25,6 +25,7 @@ export function AdminRules() {
   const { busy, run } = useLock()
   const client = useQueryClient()
   const [cohort, setCohort] = useState<number | null>(null)
+  const [section, setSection] = useState<'credits' | 'conditions'>('credits')
   const [editingYear, setEditingYear] = useState<number | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [conditionDrafts, setConditionDrafts] = useState<Record<number, boolean>>({})
@@ -33,17 +34,12 @@ export function AdminRules() {
   useUnsaved(Object.keys(drafts).length > 0 || Object.values(conditionDrafts).some(Boolean))
 
   if (query.isLoading) return <PageSkeleton />
-  if (query.isError || !query.data) return (
-    <div className="card p-4">
-      <p role="alert">{t('loadFailed')}</p>
-      <button type="button" className="btn btn-ghost mt-3" onClick={() => void query.refetch()}>{t('tryAgain')}</button>
-    </div>
-  )
+  if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
   const rules = query.data.rules.toSorted((a, b) => b.cohortYear - a.cohortYear)
   const rule = rules.find((item) => item.cohortYear === cohort) ?? rules[0]
   if (!rule) return <EmptyState>{t('noRules')}</EmptyState>
 
-  const nameOf = (item: { nameZh: string; nameEn: string }) => locale === 'en' ? item.nameEn : item.nameZh
+  const nameOf = (item: { nameZh: string; nameEn: string }) => locale === 'en' ? item.nameEn || item.nameZh : item.nameZh
   const numberLabel = (value: number | null) => value == null ? '—' : String(value)
   const changes = rule.categories.flatMap((item) => {
     const raw = drafts[item.id]
@@ -63,30 +59,34 @@ export function AdminRules() {
   }
 
   return (
-    <div className="rules-layout">
-      <aside className="card rule-cohorts">
-        <h2 className="section-title">{t('cohort')}</h2>
-        <div className="rule-year-list" role="group" aria-label={t('cohort')}>
-          {rules.map((item) => (
-            <button key={item.cohortYear} type="button" className="rule-year"
-              aria-pressed={item.cohortYear === rule.cohortYear} aria-controls="cohort-rules" disabled={busy}
-              onClick={() => { setCohort(item.cohortYear); setEditingYear(null) }}>
-              <span>{item.cohortYear}</span>
-              {(conditionDrafts[item.cohortYear] || item.categories.some((category) => drafts[category.id] !== undefined)) && <span className="rule-draft-label">{t('ruleUnsaved')}</span>}
-            </button>
-          ))}
-        </div>
-      </aside>
-      <div id="cohort-rules" className="min-w-0 space-y-4">
-        <section className="card rule-summary">
-          <div>
-            <h2 className="text-2xl font-bold">{t('cohort')} {rule.cohortYear}</h2>
-          </div>
-          {rule.totalCreditsConfirmed && rule.totalCredits != null && <dl className="rule-metrics">
-            <div><dt>{t('ruleTotalCredits')}</dt><dd>{rule.totalCredits} <span className="text-sm font-medium text-muted">{t('creditUnit')}</span></dd></div>
+    <div className="space-y-4">
+      <section className="card rules-header">
+        <div className="rules-header-top">
+          <label className="rules-cohort text-sm font-semibold">{t('cohort')}
+            <select className="field w-full" value={rule.cohortYear} disabled={busy} onChange={(event) => setCohort(Number(event.target.value))}>
+              {rules.map((item) => {
+                const dirty = conditionDrafts[item.cohortYear] || item.categories.some((category) => drafts[category.id] !== undefined)
+                return <option key={item.cohortYear} value={item.cohortYear}>{item.cohortYear}{dirty ? ` · ${t('ruleUnsaved')}` : ''}</option>
+              })}
+            </select>
+          </label>
+          {rule.totalCreditsConfirmed && rule.totalCredits != null && <dl className="rules-credit-total">
+            <div><dt>{t('ruleTotalCredits')}</dt><dd>{rule.totalCredits} <span>{t('creditUnit')}</span></dd></div>
           </dl>}
-        </section>
-        <form className="card" onSubmit={(event) => {
+        </div>
+        <div className="rules-tabs" role="group" aria-label={t('rules')}>
+          <button type="button" aria-pressed={section === 'credits'} aria-controls="rules-credits" disabled={busy} onClick={() => setSection('credits')}>
+            <GraduationCap size={18} aria-hidden />{t('ruleCreditsTab')}
+            {changes.length > 0 && <span className="rules-tab-draft">{t('ruleUnsaved')}</span>}
+          </button>
+          <button type="button" aria-pressed={section === 'conditions'} aria-controls="rules-conditions" disabled={busy} onClick={() => setSection('conditions')}>
+            <ClipboardCheck size={17} aria-hidden />{t('graduationRequirements')}
+            {conditionDrafts[rule.cohortYear] && <span className="rules-tab-draft">{t('ruleUnsaved')}</span>}
+          </button>
+        </div>
+      </section>
+      <div className="min-w-0">
+        <form className="card" id="rules-credits" hidden={section !== 'credits'} onSubmit={(event) => {
           event.preventDefault()
           if (!changes.length || changes.some((change) => !change.valid)) return
           void run(async () => {
@@ -97,7 +97,8 @@ export function AdminRules() {
               const categories = changes.map(({ item, value }) => ({
                 id: item.id, requiredCredits: value, isPlaceholder: value === null, noteZh: item.noteZh, noteEn: item.noteEn,
               }))
-              await api(`/api/admin/rules/${rule.cohortYear}`, { method: 'PATCH', body: { categories }, silent: true })
+              const result = await api<{ ok: boolean }>(`/api/admin/rules/${rule.cohortYear}`, { method: 'PATCH', body: { categories }, silent: true })
+              if (result.ok !== true) throw new ApiError('SERVER')
               client.setQueryData<{ rules: Rule[] }>(['rules'], (current) => current && ({
                 rules: current.rules.map((entry) => entry.cohortYear !== rule.cohortYear ? entry : {
                   ...entry, categories: entry.categories.map((item) => ({ ...item, ...categories.find((updated) => updated.id === item.id) })),
@@ -169,12 +170,14 @@ export function AdminRules() {
             </div>
           </footer>}
         </form>
-        {rules.map((entry) => (
-          <div key={entry.cohortYear} hidden={entry.cohortYear !== rule.cohortYear}>
-            <RuleConditions cohortYear={entry.cohortYear} conditions={entry.thresholds ?? []}
-              onDirtyChange={(dirty) => setConditionDrafts((current) => ({ ...current, [entry.cohortYear]: dirty }))} />
-          </div>
-        ))}
+        <div id="rules-conditions" hidden={section !== 'conditions'}>
+          {rules.map((entry) => (
+            <div key={entry.cohortYear} hidden={entry.cohortYear !== rule.cohortYear}>
+              <RuleConditions cohortYear={entry.cohortYear} conditions={entry.thresholds ?? []}
+                onDirtyChange={(dirty) => setConditionDrafts((current) => ({ ...current, [entry.cohortYear]: dirty }))} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
