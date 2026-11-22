@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Award, CalendarClock, GraduationCap, History, TriangleAlert } from 'lucide-react'
+import { Award, CalendarClock, GraduationCap, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfirm, useLock } from '../components/confirm'
 import { EmptyState, StatusPill } from '../components/shell'
@@ -140,42 +140,6 @@ export function AdminStats() {
         </div>
         )}
       </section>
-    </div>
-  )
-}
-
-export function AdminAudit() {
-  const { t, locale } = useI18n()
-  const [search, setSearch] = useState('')
-  const query = useQuery({
-    queryKey: ['audit'],
-    queryFn: () => api<{ logs: { id: string; action: string; summaryZh: string; summaryEn: string; createdAt: string; actor: { account: string } | null }[] }>('/api/admin/audit'),
-  })
-  if (query.isLoading) return <PageSkeleton />
-  if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
-  const term = search.trim().toLowerCase()
-  const logs = query.data.logs.filter((log) =>
-    [log.summaryZh, log.summaryEn, log.action, log.actor?.account ?? 'system'].some((value) => value.toLowerCase().includes(term)),
-  )
-  return (
-    <div className="space-y-4">
-      <label className="card block p-4 text-sm font-semibold">
-        {t('auditSearch')}
-        <input className="field block w-full max-w-xl" type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
-      </label>
-      {logs.length === 0 && <EmptyState>{term ? t('noAuditMatches') : t('empty')}</EmptyState>}
-      <ul className="space-y-2">
-      {logs.map((log) => (
-        <li key={log.id} className="card workspace-event text-sm">
-          <span className="workspace-event-icon"><History size={18} aria-hidden /></span>
-          <div className="min-w-0">
-            <p className="text-xs text-muted"><time dateTime={log.createdAt}>{new Date(log.createdAt).toLocaleString(locale)}</time> · {log.actor?.account ?? 'system'}</p>
-            <p className="mt-1">{locale === 'en' ? log.summaryEn : log.summaryZh}</p>
-            <span className="tag mt-2 break-all">{log.action}</span>
-          </div>
-        </li>
-      ))}
-      </ul>
     </div>
   )
 }
