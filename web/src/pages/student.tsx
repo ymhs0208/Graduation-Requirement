@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { ArrowRight, Bell, CalendarDays, ChevronDown, Clock, FileUp, ListChecks, Megaphone } from 'lucide-react'
+import { ArrowRight, CalendarDays, ChevronDown, Clock, FileUp, ListChecks } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { LoadError, PageSkeleton, PendingLabel, TableSkeleton } from '../components/feedback'
+import { PageSkeleton, PendingLabel } from '../components/feedback'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { conditionDescription } from '../lib/conditions'
@@ -211,32 +211,5 @@ export function PlanPage() {
   return (
     <CurriculumPlan key={progress.cohortYear} courses={items} cohort={progress.cohortYear}
       minimums={{ MAJOR_REQUIRED: minimum('MAJOR_REQUIRED'), MAJOR_ELECTIVE: minimum('ELECTIVE'), LIBERAL: minimum('LIBERAL') }} />
-  )
-}
-
-export function NotificationsPage({ canPublish }: { canPublish: boolean }) {
-  const { t, locale } = useI18n()
-  const query = useQuery({
-    queryKey: ['notes'],
-    queryFn: () => api<{ notifications: { id: string; kind: string; titleZh: string; titleEn: string; bodyZh: string; bodyEn: string; readAt: string | null; createdAt: string }[] }>('/api/inbox'),
-  })
-  if (query.isLoading) return <TableSkeleton />
-  if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
-  return (
-    <div className="space-y-3">
-      {canPublish && <Link className="btn btn-primary" to="/admin/announcements"><Megaphone size={17} aria-hidden />{t('announcementCompose')}</Link>}
-      {query.data.notifications.length === 0 && <EmptyState>{t('empty')}</EmptyState>}
-      {query.data.notifications.map((item) => (
-        <article key={item.id} className={`card workspace-event ${item.readAt ? '' : 'workspace-event-unread'}`}>
-          <span className="workspace-event-icon">{item.kind === 'announcement' ? <Megaphone size={18} aria-hidden /> : <Bell size={18} aria-hidden />}</span>
-          <div className="min-w-0">
-            <time className="text-xs text-muted" dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleDateString(locale)}</time>
-            {item.kind === 'announcement' && <span className="tag ml-2">{t('announcementBadge')}</span>}
-            <h2 className="font-semibold">{locale === 'en' ? item.titleEn : item.titleZh}</h2>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-ink">{locale === 'en' ? item.bodyEn : item.bodyZh}</p>
-          </div>
-        </article>
-      ))}
-    </div>
   )
 }
