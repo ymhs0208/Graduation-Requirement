@@ -51,7 +51,7 @@ function StudentDetail({ id }: { id: string }) {
 
   const back = <Link className="btn btn-ghost" to="/teacher"><ArrowLeft size={16} aria-hidden />{t('classes')}</Link>
   if (query.isLoading) return <PageSkeleton />
-  if (!query.data) return (
+  if (query.isError || !query.data) return (
     <div className="space-y-4">
       {back}
       <div className="card p-5">

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
-import { PageSkeleton, PendingButton } from '../components/feedback'
+import { LoadError, PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
 import { api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
@@ -86,7 +86,7 @@ export function AdminPlan() {
   }
 
   if (cohorts.isLoading) return <PageSkeleton />
-  if (!cohorts.data) return <div className="card p-4"><p role="alert">{t('loadFailed')}</p><button type="button" className="btn btn-ghost mt-2" onClick={() => void cohorts.refetch()}>{t('tryAgain')}</button></div>
+  if (cohorts.isError || !cohorts.data) return <LoadError pending={cohorts.isFetching} onRetry={() => void cohorts.refetch()} />
   if (selected === undefined) return <EmptyState>{t('noRules')}</EmptyState>
 
   return (
@@ -182,10 +182,10 @@ export function AdminPlan() {
               </select>
             </label>
           </div>
-          {courseList.data && <p className="mt-2 text-sm text-muted" role="status">{items.length} / {courseList.data.items.length}</p>}
+          {courseList.data && !courseList.isError && <p className="mt-2 text-sm text-muted" role="status">{items.length} / {courseList.data.items.length}</p>}
         </div>
-        {courseList.isLoading ? <div className="p-4"><PageSkeleton /></div> : !courseList.data ? (
-          <div className="p-4"><p role="alert">{t('loadFailed')}</p><button type="button" className="btn btn-ghost mt-2" onClick={() => void courseList.refetch()}>{t('tryAgain')}</button></div>
+        {courseList.isLoading ? <div className="p-4"><PageSkeleton /></div> : courseList.isError || !courseList.data ? (
+          <div className="p-4"><LoadError pending={courseList.isFetching} onRetry={() => void courseList.refetch()} /></div>
         ) : !items.length ? <EmptyState>{t('curriculumNoResults')}</EmptyState> : (
           <ul>
             {visible.map((item) => (

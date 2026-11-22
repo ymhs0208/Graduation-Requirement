@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { CalendarDays, Clock, Pencil, ShieldAlert, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
-import { PageSkeleton, PendingButton } from '../components/feedback'
+import { LoadError, PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
-import { api, errorMessage } from '../lib/api'
+import { ApiError, api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 
 type Candidate = { id: string; account: string; nameZh: string; deactivatedAt: string; deactivationReason: string | null }
@@ -28,11 +28,12 @@ export function AdminRetention() {
 
   const saved = query.data
   if (!saved && query.isLoading) return <PageSkeleton />
-  if (!saved) return (
-    <section className="card p-5">
-      <p className="text-sm text-muted" role="alert">{t('loadFailed')}</p>
-      <button type="button" className="btn btn-ghost mt-3" onClick={() => void query.refetch()}>{t('tryAgain')}</button>
-    </section>
+  const feedback = message && <p className={`login-result ${message.error ? '' : 'login-result-success'}`} role={message.error ? 'alert' : 'status'}>{message.text}</p>
+  if (query.isError || !saved) return (
+    <div className="space-y-4">
+      {feedback}
+      <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
+    </div>
   )
 
   const { retentionYears, preview } = saved
@@ -49,7 +50,7 @@ export function AdminRetention() {
 
   return (
     <div className="space-y-4">
-      {message && <p className={`login-result ${message.error ? '' : 'login-result-success'}`} role={message.error ? 'alert' : 'status'}>{message.text}</p>}
+      {feedback}
       <div className="retention-overview">
         <section className="card metric-card">
           <span className="workspace-event-icon"><Clock size={20} aria-hidden /></span>
@@ -82,8 +83,8 @@ export function AdminRetention() {
                   try {
                     await api('/api/admin/retention', { method: 'PUT', body: { retentionYears: years }, silent: true })
                     closeEditor()
-                    await query.refetch({ throwOnError: true })
                     setMessage({ text: t('retentionSaved'), error: false })
+                    await query.refetch()
                   } catch (error) {
                     setMessage({ text: errorMessage(error, locale, t('error')), error: true })
                   } finally {
@@ -149,8 +150,9 @@ export function AdminRetention() {
                     return
                   }
                   const result = await api<{ count: number }>('/api/admin/retention/purge', { method: 'POST', body: { confirm: 'PURGE' }, timeout: 60_000, silent: true })
-                  await query.refetch({ throwOnError: true })
+                  if (!Number.isInteger(result.count) || result.count < 0) throw new ApiError('SERVER')
                   setMessage({ text: `${t('retentionPurged')} · ${result.count} ${t('retentionAccountUnit')}`, error: false })
+                  await query.refetch()
                 } catch (error) {
                   await query.refetch()
                   setMessage({ text: errorMessage(error, locale, t('retentionCleanupFailed')), error: true })

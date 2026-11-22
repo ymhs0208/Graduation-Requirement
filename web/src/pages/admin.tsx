@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Award, CalendarClock, ClipboardCheck, GraduationCap, History, TriangleAlert } from 'lucide-react'
+import { toast } from 'sonner'
 import { useConfirm, useLock } from '../components/confirm'
 import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
-import { api, errorMessage, fetchAuthenticatedFile } from '../lib/api'
+import { api, downloadCsv, errorMessage } from '../lib/api'
 import { LoadError, PageSkeleton, PendingLabel, StepStatus } from '../components/feedback'
 import { useI18n } from '../lib/i18n'
 
@@ -46,23 +47,11 @@ export function AdminStats() {
             setJob('export')
             setStep(0)
             try {
-              const response = await fetchAuthenticatedFile(`/api/admin/export?cohort=${query.data?.cohortYear}`)
-              if (response.status === 401) return
-              if (!response.ok || !response.headers.get('content-type')?.startsWith('text/csv')) throw new Error('export')
-              setStep(1)
-              const blob = await response.blob()
-              if (!blob.size) throw new Error('export')
-              const url = URL.createObjectURL(blob)
-              const link = document.createElement('a')
-              link.href = url
-              link.download = `graduation-${query.data?.cohortYear}.csv`
-              link.click()
-              URL.revokeObjectURL(url)
+              await downloadCsv(`/api/admin/export?cohort=${query.data?.cohortYear}`, `graduation-${query.data?.cohortYear}.csv`)
               setStep(2)
-              const { toast } = await import('sonner')
               toast.success(t('exportDone'))
-            } catch {
-              setMessage(t('exportFailed'))
+            } catch (error) {
+              setMessage(errorMessage(error, locale, t('exportFailed')))
               setStep(-1)
             } finally {
               window.setTimeout(() => { setJob(''); setStep(-1) }, 900)

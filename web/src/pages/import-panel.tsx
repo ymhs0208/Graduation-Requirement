@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLock, useUnsaved } from '../components/confirm'
 import { PendingLabel, StepStatus, UploadProgress } from '../components/feedback'
-import { api, errorMessage, fetchAuthenticatedFile } from '../lib/api'
+import { ApiError, api, downloadCsv, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 
 type Kind = 'accounts' | 'credits'
@@ -22,18 +22,6 @@ const tone: Record<Status, string> = {
   conflict: 'bg-[#e8eef6]',
 }
 
-async function download(path: string, filename: string) {
-  const response = await fetchAuthenticatedFile(path)
-  if (!response.ok) return
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 export function ImportPanel() {
   const { t, locale } = useI18n()
   const { busy, run } = useLock()
@@ -43,7 +31,7 @@ export function ImportPanel() {
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [conflict, setConflict] = useState<'skip' | 'update'>('skip')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null)
   const [passwords, setPasswords] = useState<{ account: string; tempPassword: string }[]>([])
   const [percent, setPercent] = useState<number | null>(null)
   const [commitStep, setCommitStep] = useState(-1)
@@ -52,6 +40,14 @@ export function ImportPanel() {
   const fileNote = !file ? t('importNeedCsv') : !file.name.toLowerCase().endsWith('.csv') ? t('importCsvType') : file.size > 500_000 ? t('importCsvSize') : ''
   const writable = (preview?.counts.valid ?? 0) + (conflict === 'update' ? preview?.counts.conflict ?? 0 : 0)
   const commitDisabled = busy || !preview || writable === 0
+  async function download(path: string, filename: string) {
+    setMessage(null)
+    try {
+      await downloadCsv(path, filename)
+    } catch (error) {
+      setMessage({ text: errorMessage(error, locale, t('exportFailed')), error: true })
+    }
+  }
   return (
     <section className="card space-y-4 p-4 sm:p-5">
       <div>
@@ -68,7 +64,7 @@ export function ImportPanel() {
             setFile(null)
             setConflict('skip')
             setPasswords([])
-            setMessage('')
+            setMessage(null)
             if (fileInput.current) fileInput.current.value = ''
           }}>
             {item === 'accounts' ? t('importKindAccounts') : t('importKindCredits')}
@@ -91,7 +87,7 @@ export function ImportPanel() {
             setPreview(null)
             setConflict('skip')
             setPasswords([])
-            setMessage('')
+            setMessage(null)
           }}
         />
       </label>
@@ -104,7 +100,7 @@ export function ImportPanel() {
         onClick={() =>
           run(async () => {
             if (!file || fileNote) return
-            setMessage('')
+            setMessage(null)
             setPasswords([])
             const form = new FormData()
             form.set('kind', kind)
@@ -113,10 +109,12 @@ export function ImportPanel() {
             uploadAbort.current = controller
             setPercent(0)
             try {
-              setPreview(await api<Preview>('/api/admin/import/preview', { method: 'POST', form, onProgress: setPercent, signal: controller.signal }))
+              const result = await api<Preview>('/api/admin/import/preview', { method: 'POST', form, onProgress: setPercent, signal: controller.signal, silent: true })
+              if (!result.previewId || !result.counts || !Array.isArray(result.rows)) throw new ApiError('SERVER')
+              setPreview(result)
             } catch (error) {
               setPreview(null)
-              setMessage(errorMessage(error, locale, t('error')))
+              setMessage({ text: errorMessage(error, locale, t('error')), error: true })
             } finally {
               uploadAbort.current = null
               setPercent(null)
@@ -179,25 +177,33 @@ export function ImportPanel() {
               onClick={() =>
                 run(async () => {
                   if (commitDisabled || !preview) return
-                  setMessage('')
+                  setMessage(null)
                   setCommitStep(0)
                   try {
                     setCommitStep(1)
-                    const result = await api<{ committed: number; updated: number; skipped: number; activations?: { account: string; tempPassword: string }[] }>('/api/admin/import/commit', {
+                    const result = await api<{ committed: number; updated: number; skipped: number; activations?: { account: string; tempPassword: string }[]; activationFailures?: string[] }>('/api/admin/import/commit', {
                       method: 'POST',
                       body: { previewId: preview.previewId, conflict, confirm: true },
                       timeout: 120000,
-                      success: t('importDone'),
+                      silent: true,
                     })
+                    if (![result.committed, result.updated, result.skipped].every(Number.isInteger)) throw new ApiError('SERVER')
                     setCommitStep(2)
                     setPasswords(result.activations ?? [])
-                    setMessage(`${t('importResult')} ${result.committed} / ${result.updated} / ${result.skipped}`)
+                    const counts = `${t('importResult')} ${result.committed} / ${result.updated} / ${result.skipped}`
+                    const failures = result.activationFailures ?? []
+                    setMessage(failures.length
+                      ? { text: `${counts}。 ${t('importActivationFailed')} ${failures.join('、')}`, error: true }
+                      : { text: counts, error: false })
                     setPreview(null)
                     setFile(null)
                     if (fileInput.current) fileInput.current.value = ''
                     if (kind === 'accounts') await client.invalidateQueries({ queryKey: ['users'] })
                   } catch (error) {
-                    setMessage(errorMessage(error, locale, t('error')))
+                    setCommitStep(-1)
+                    const code = error instanceof ApiError ? error.code : ''
+                    const text = ['OFFLINE', 'TIMEOUT', 'SERVER'].includes(code) ? t('importUnconfirmed') : errorMessage(error, locale, t('error'))
+                    setMessage({ text, error: true })
                   } finally {
                     window.setTimeout(() => setCommitStep(-1), 1200)
                   }
@@ -220,7 +226,7 @@ export function ImportPanel() {
           {commitDisabled && preview && writable === 0 && <p className="text-sm text-muted">{t('importNoValid')}</p>}
         </>
       )}
-      {message && <p className="text-sm font-medium">{message}</p>}
+      {message && <p role={message.error ? 'alert' : 'status'} className={`login-result ${message.error ? '' : 'login-result-success'}`}>{message.text}</p>}
       {passwords.length > 0 && (
         <ul className="space-y-1 rounded-xl bg-[#fff6e0] px-3 py-2 text-sm text-[#8a5600]">
           {passwords.map((item) => (

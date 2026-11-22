@@ -33,7 +33,7 @@ export function AdminRules() {
   useUnsaved(Object.keys(drafts).length > 0 || Object.values(conditionDrafts).some(Boolean))
 
   if (query.isLoading) return <PageSkeleton />
-  if (!query.data) return (
+  if (query.isError || !query.data) return (
     <div className="card p-4">
       <p role="alert">{t('loadFailed')}</p>
       <button type="button" className="btn btn-ghost mt-3" onClick={() => void query.refetch()}>{t('tryAgain')}</button>

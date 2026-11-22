@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, FileUp, Search, ShieldCheck, UserPlus, UserRoundX, UsersRound } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
-import { PageSkeleton, PendingButton } from '../components/feedback'
+import { LoadError, PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
 import { api, errorMessage } from '../lib/api'
 import { useI18n } from '../lib/i18n'
@@ -34,6 +34,7 @@ export function AdminUsers() {
   const [form, setForm] = useState(emptyForm)
   const [attempted, setAttempted] = useState(false)
   const [message, setMessage] = useState('')
+  const [statusError, setStatusError] = useState('')
   const [created, setCreated] = useState<{ account: string; tempPassword?: string } | null>(null)
   const panelHeading = useRef<HTMLHeadingElement>(null)
   const directoryHeading = useRef<HTMLHeadingElement>(null)
@@ -89,7 +90,7 @@ export function AdminUsers() {
 
   return (
     <div className="space-y-4">
-      {mode === 'list' && query.data && (
+      {mode === 'list' && query.data && !query.isError && (
         <div className="directory-summary">
           {([
             ['directoryTotal', directory.length, UsersRound],
@@ -137,11 +138,9 @@ export function AdminUsers() {
             </label>
           </div>
         </div>
-        {query.isLoading ? <div className="p-4"><PageSkeleton /></div> : query.isError ? (
-          <div className="p-4">
-            <p role="alert" className="login-result">{t('loadFailed')}</p>
-            <button type="button" className="btn btn-ghost mt-2" onClick={() => void query.refetch()}>{t('tryAgain')}</button>
-          </div>
+        {statusError && <p role="alert" className="login-result m-4">{statusError}</p>}
+        {query.isLoading ? <div className="p-4"><PageSkeleton /></div> : query.isError || !query.data ? (
+          <div className="p-4"><LoadError pending={query.isFetching} onRetry={() => void query.refetch()} /></div>
         ) : <>
           <div className="directory-results">
             <p className="text-sm text-muted" role="status">{t('directoryResults')} {users.length} / {directory.length}</p>
@@ -166,8 +165,13 @@ export function AdminUsers() {
                   <span className={`account-state justify-self-start ${deactivating && !user.anonymized ? 'account-state-active' : ''}`}>{t(user.anonymized ? 'accountAnonymized' : deactivating ? 'itemActive' : 'accountInactive')}</span>
                   {!user.anonymized && <button type="button" className="btn btn-ghost" disabled={busy} aria-label={`${action} ${user.account}`} onClick={() => run(async () => {
                     if (!await confirm({ title: `${action} · ${user.account}`, body: t(deactivating ? 'confirmDeactivate' : 'confirmReactivate'), confirm: action, danger: deactivating })) return
-                    await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: deactivating ? { status: 'DEACTIVATED', deactivationReason: 'SUSPENDED' } : { status: 'ACTIVE' }, success: t('saved') }).catch(() => undefined)
-                    await client.invalidateQueries({ queryKey: ['users'] })
+                    setStatusError('')
+                    try {
+                      await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: deactivating ? { status: 'DEACTIVATED', deactivationReason: 'SUSPENDED' } : { status: 'ACTIVE' }, success: t('saved'), silent: true })
+                      await client.invalidateQueries({ queryKey: ['users'] })
+                    } catch (error) {
+                      setStatusError(errorMessage(error, locale, t('error')))
+                    }
                   })}>{action}</button>}
                 </li>
               )

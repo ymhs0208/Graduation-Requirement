@@ -29,6 +29,23 @@ export async function fetchAuthenticatedFile(path: string) {
   return response
 }
 
+export async function downloadCsv(path: string, filename: string) {
+  const response = await fetchAuthenticatedFile(path)
+  if (!response.ok) {
+    await readPayload(response)
+    throw new ApiError('SERVER')
+  }
+  if (!/^text\/csv\b/i.test(response.headers.get('content-type') ?? '')) throw new ApiError('SERVER')
+  const blob = await response.blob()
+  if (!blob.size) throw new ApiError('SERVER')
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 function reportConnection() {
   connectionListeners.forEach((listener) => listener())
 }
@@ -194,7 +211,7 @@ function parsePayload<T>(text: string, status: number): T {
   }
   if (!data || typeof data !== 'object' || Array.isArray(data) || !Object.keys(data).length) throw new ApiError(fallback)
   const payload = data as Record<string, unknown>
-  if (status < 200 || status >= 300 || typeof payload.error === 'string') {
+  if (status < 200 || status >= 300 || payload.ok === false || typeof payload.error === 'string') {
     throw new ApiError(
       typeof payload.error === 'string' ? payload.error : fallback,
       typeof payload.messageZh === 'string' ? payload.messageZh : undefined,

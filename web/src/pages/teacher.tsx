@@ -41,7 +41,7 @@ export function TeacherHome() {
     },
   })
   if (query.isLoading) return <TableSkeleton />
-  if (!query.data) return (
+  if (query.isError || !query.data) return (
     <section className="card p-5">
       <p className="text-sm text-muted" role="alert">{t('loadFailed')}</p>
       <button type="button" className="btn btn-ghost mt-3" onClick={() => void query.refetch()}>{t('tryAgain')}</button>

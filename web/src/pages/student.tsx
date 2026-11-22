@@ -24,7 +24,7 @@ export function StudentHome() {
   const [step, setStep] = useState(0)
   const [leaving, setLeaving] = useState(false)
   if (query.isLoading) return <PageSkeleton />
-  if (!query.data) return (
+  if (query.isError || !query.data) return (
     <section className="card p-5">
       <p role="alert" className="text-sm text-muted">{t('loadFailed')}</p>
       <button className="btn btn-ghost mt-3" type="button" onClick={() => void query.refetch()}>{t('tryAgain')}</button>
@@ -200,7 +200,7 @@ export function PlanPage() {
     queryFn: () => api<{ items: PlanCourse[]; progress: Progress }>('/api/me/plan'),
   })
   if (query.isLoading) return <PageSkeleton />
-  if (!query.data) return (
+  if (query.isError || !query.data) return (
     <div className="card p-4">
       <p role="alert" className="text-sm text-muted">{t('loadFailed')}</p>
       <button type="button" className="btn btn-ghost mt-2" onClick={() => void query.refetch()}>{t('tryAgain')}</button>

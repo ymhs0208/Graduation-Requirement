@@ -130,7 +130,7 @@ export async function commitPreview(actorId: string, previewId: string, conflict
       let committed = 0
       let updated = 0
       let skipped = 0
-      const createdIds: string[] = []
+      const createdAccounts: { id: string; account: string }[] = []
       if (preview.kind === 'accounts') {
         for (const row of preview.rows) {
           if (!row.account || (row.status !== 'valid' && row.status !== 'conflict')) continue
@@ -171,7 +171,7 @@ export async function commitPreview(actorId: string, previewId: string, conflict
               mustChangePassword: true,
             },
           })
-          createdIds.push(created.id)
+          createdAccounts.push({ id: created.id, account: created.account })
           committed += 1
         }
       } else {
@@ -225,23 +225,25 @@ export async function commitPreview(actorId: string, previewId: string, conflict
           committed += 1
         }
       }
-      return { committed, updated, skipped, createdIds }
-    })
-    const activations = []
-    for (const id of result.createdIds) {
-      const issued = await issueActivation(id).catch(() => null)
-      if (issued) activations.push(issued)
-    }
-    await audit({
-      actorId,
-      action: preview.kind === 'accounts' ? 'user.import' : 'credit.import',
-      entityType: preview.kind === 'accounts' ? 'user' : 'credit',
-      summaryZh: `匯入${preview.kind === 'accounts' ? '帳號' : '學分'}：新增 ${result.committed}、更新 ${result.updated}、略過 ${result.skipped}`,
-      summaryEn: `Imported ${preview.kind}: created ${result.committed}, updated ${result.updated}, skipped ${result.skipped}`,
-      after: { committed: result.committed, updated: result.updated, skipped: result.skipped, conflict },
+      await audit({
+        actorId,
+        action: preview.kind === 'accounts' ? 'user.import' : 'credit.import',
+        entityType: preview.kind === 'accounts' ? 'user' : 'credit',
+        summaryZh: `匯入${preview.kind === 'accounts' ? '帳號' : '學分'}：新增 ${committed}、更新 ${updated}、略過 ${skipped}`,
+        summaryEn: `Imported ${preview.kind}: created ${committed}, updated ${updated}, skipped ${skipped}`,
+        after: { committed, updated, skipped, conflict },
+      }, tx)
+      return { committed, updated, skipped, createdAccounts }
     })
     previews.delete(preview.id)
-    return { committed: result.committed, updated: result.updated, skipped: result.skipped, activations }
+    const activations = []
+    const activationFailures: string[] = []
+    for (const { id, account } of result.createdAccounts) {
+      const issued = await issueActivation(id).catch(() => null)
+      if (issued) activations.push(issued)
+      else activationFailures.push(account)
+    }
+    return { committed: result.committed, updated: result.updated, skipped: result.skipped, activations, activationFailures }
   } catch (error) {
     preview.used = false
     throw error
