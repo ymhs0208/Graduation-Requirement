@@ -36,7 +36,30 @@ export async function downloadCsv(path: string, filename: string) {
     throw new ApiError('SERVER')
   }
   if (!/^text\/csv\b/i.test(response.headers.get('content-type') ?? '')) throw new ApiError('SERVER')
-  const blob = await response.blob()
+  saveDownload(await response.blob(), filename)
+}
+
+export async function downloadEvidence(fileId: string, displayedName: string) {
+  const response = await fetchAuthenticatedFile(`/api/files/${encodeURIComponent(fileId)}`)
+  if (!response.ok) {
+    await readPayload(response)
+    throw new ApiError('SERVER')
+  }
+  const mime = response.headers.get('content-type') ?? ''
+  if (!/^(application\/pdf|image\/(png|jpeg))\b/i.test(mime)) throw new ApiError('SERVER')
+  const encodedName = /(?:^|;)\s*filename\*=UTF-8''([^;]+)/i.exec(response.headers.get('content-disposition') ?? '')?.[1]
+  let filename = displayedName
+  if (encodedName) {
+    try {
+      filename = decodeURIComponent(encodedName.trim()) || displayedName
+    } catch {
+      // Older servers may only provide an ASCII fallback. The displayed name is already decoded.
+    }
+  }
+  saveDownload(await response.blob(), filename)
+}
+
+function saveDownload(blob: Blob, filename: string) {
   if (!blob.size) throw new ApiError('SERVER')
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

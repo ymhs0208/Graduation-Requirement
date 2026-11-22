@@ -270,7 +270,7 @@ export function EvidencePage() {
             <div className="panel-heading"><h2 ref={previewTitle} tabIndex={-1} className="section-title">{t('preview')}</h2>
               {preview && <p className="mt-1 break-all text-sm text-muted">{preview.originalName}</p>}
             </div>
-            <div className="px-4 pb-4">{preview ? <DocumentPreview fileId={preview.id} /> : <EmptyState>{t('advisorChooseFile')}</EmptyState>}</div>
+            <div className="px-4 pb-4">{preview ? <DocumentPreview key={preview.id} fileId={preview.id} filename={preview.originalName} /> : <EmptyState>{t('advisorChooseFile')}</EmptyState>}</div>
           </section>}
         </div>
       ))}

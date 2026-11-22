@@ -170,7 +170,7 @@ function StudentDetail({ id }: { id: string }) {
               <h2 ref={previewTitle} tabIndex={-1} className="section-title">{t('preview')}</h2>
               {file && <p className="mt-1 break-all text-sm text-muted">{file.originalName}</p>}
             </div>
-            <div className="px-4 pb-4">{file ? <DocumentPreview fileId={file.id} /> : <EmptyState>{t('advisorChooseFile')}</EmptyState>}</div>
+            <div className="px-4 pb-4">{file ? <DocumentPreview key={file.id} fileId={file.id} filename={file.originalName} /> : <EmptyState>{t('advisorChooseFile')}</EmptyState>}</div>
           </section>
         </div>
       )}

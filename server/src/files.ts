@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import { randomBytes } from 'crypto'
 import { isUtf8 } from 'node:buffer'
+import iconv from 'iconv-lite'
 import { env } from './env'
 
 export function sniff(buf: Buffer): { mime: string; ext: string } | null {
@@ -70,7 +71,7 @@ export function evidenceUploadName(account: string, threshold: string, uploadedA
 }
 
 export function cleanUploadName(name: string) {
-  const clean = name.replace(/[\/\\\p{Cc}\uD800-\uDFFF]/gu, '_').trim() || 'upload'
+  const clean = name.normalize('NFC').replace(/[<>:"/\\|?*\p{Cc}\uD800-\uDFFF]/gu, '_').trim().replace(/[. ]+$/, '') || 'upload'
   const chars = Array.from(clean)
   if (chars.length <= maxFileNameLength) return clean
   const extension = path.extname(clean)
@@ -79,15 +80,12 @@ export function cleanUploadName(name: string) {
 }
 
 export function displayUploadName(name: string) {
-  // Older multipart uploads treated UTF-8 header bytes as Latin-1.
-  if (/^[\u0000-\u00ff]+$/u.test(name)) {
-    const bytes = Buffer.from(name, 'latin1')
-    if (isUtf8(bytes)) {
-      const decoded = bytes.toString('utf8')
-      if (/[\u0080-\u009f]/u.test(name) || /[\p{Script=Han}\u{10000}-\u{10ffff}]/u.test(decoded)) {
-        return cleanUploadName(decoded)
-      }
-    }
+  // Recover UTF-8 header bytes that older clients interpreted as Western text.
+  const isLatin1 = /^[\u0000-\u00ff]+$/u.test(name)
+  const bytes = isLatin1 ? Buffer.from(name, 'latin1') : iconv.encode(name, 'windows-1252')
+  if ((isLatin1 || iconv.decode(bytes, 'windows-1252') === name) && isUtf8(bytes)) {
+    const decoded = bytes.toString('utf8')
+    if (/[\u0080-\u009f]/u.test(name) || /[\p{Script=Han}\u{10000}-\u{10ffff}]/u.test(decoded)) return cleanUploadName(decoded)
   }
   return cleanUploadName(name)
 }

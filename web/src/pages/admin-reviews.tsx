@@ -154,7 +154,7 @@ export function AdminReviews() {
                     </div>
                   ) : activeFile && <p className="review-filename"><FileText size={15} aria-hidden />{activeFile.originalName}</p>}
                 </div>
-                {activeFile ? <div className="review-preview"><DocumentPreview key={activeFile.id} fileId={activeFile.id} /></div>
+                {activeFile ? <div className="review-preview"><DocumentPreview key={activeFile.id} fileId={activeFile.id} filename={activeFile.originalName} /></div>
                   : <EmptyState>{t('reviewNoFiles')}</EmptyState>}
               </section>
               <form className="card review-decision" onSubmit={(event) => { event.preventDefault(); review(submission, 'APPROVED') }}>

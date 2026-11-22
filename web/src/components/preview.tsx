@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
+import { Download } from 'lucide-react'
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useI18n } from '../lib/i18n'
-import { fetchAuthenticatedFile } from '../lib/api'
-import { LoadError } from './feedback'
+import { downloadEvidence, errorMessage, fetchAuthenticatedFile } from '../lib/api'
+import { LoadError, PendingButton } from './feedback'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
-export function DocumentPreview({ fileId }: { fileId: string }) {
-  const { t } = useI18n()
+export function DocumentPreview({ fileId, filename }: { fileId: string; filename: string }) {
+  const { t, locale } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [image, setImage] = useState<string | null>(null)
@@ -17,6 +18,20 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
   const [zoom, setZoom] = useState(1.1)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
+
+  async function download() {
+    setDownloading(true)
+    setDownloadError('')
+    try {
+      await downloadEvidence(fileId, filename)
+    } catch (error) {
+      setDownloadError(errorMessage(error, locale, t('evidenceDownloadFailed')))
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -96,7 +111,11 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
             </button>
           </>
         )}
+        <PendingButton type="button" className="btn btn-ghost ms-auto px-2.5 py-1" pending={downloading} onClick={() => void download()}>
+          <Download size={15} aria-hidden />{t('evidenceDownload')}
+        </PendingButton>
       </div>
+      {downloadError && <p className="login-result mx-3 mt-2" role="alert">{downloadError}</p>}
       <div className="flex-1 overflow-auto p-4" tabIndex={0} role="group" aria-label={t('reviewDocumentContent')}>
         {error && <LoadError message={t('previewFailed')} onRetry={() => setAttempt((value) => value + 1)} />}
         {!error && !image && !pdf && <p role="status">{t('loading')}</p>}
