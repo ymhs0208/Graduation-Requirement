@@ -28,6 +28,7 @@ test('login page has no WCAG 2.1 AA violations', async ({ page }) => {
 })
 
 test('student pages have no WCAG 2.1 AA violations', async ({ page }) => {
+  test.setTimeout(60_000)
   await signIn(page, 'B11023008', 'Study#Nutc2026')
   await page.getByText('B11023008').waitFor()
   await expectAccessible(page)
@@ -36,6 +37,11 @@ test('student pages have no WCAG 2.1 AA violations', async ({ page }) => {
     await page.locator('#main').waitFor()
     await expectAccessible(page)
   }
+  await page.goto('/evidence')
+  await page.getByText('英文能力門檻', { exact: true }).click()
+  await page.getByRole('button', { name: '下一步' }).click()
+  await page.getByText('本人聲明所上傳文件為正本或與正本相符，如有不實願負校規及法律責任').waitFor()
+  await expectAccessible(page)
 })
 
 test('teacher class list has no WCAG 2.1 AA violations', async ({ page }) => {

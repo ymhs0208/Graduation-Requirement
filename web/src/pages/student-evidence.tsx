@@ -7,6 +7,7 @@ import { DocumentPreview } from '../components/preview'
 import { EmptyState, StatusPill } from '../components/shell'
 import { ApiError, api, errorMessage } from '../lib/api'
 import { conditionDescription } from '../lib/conditions'
+import { officialSource } from '../lib/official-source'
 import { useI18n } from '../lib/i18n'
 import type { Progress } from '../lib/progress'
 
@@ -37,6 +38,10 @@ export function EvidencePage() {
   const [itemId, setItemId] = useState('')
   const [score, setScore] = useState('')
   const [note, setNote] = useState('')
+  const [certificateNumber, setCertificateNumber] = useState('')
+  const [issuingBody, setIssuingBody] = useState('')
+  const [issuedOn, setIssuedOn] = useState('')
+  const [declaration, setDeclaration] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<EvidenceFile | null>(null)
   const [message, setMessage] = useState('')
@@ -46,7 +51,7 @@ export function EvidencePage() {
   const picker = useRef<HTMLInputElement>(null)
   const previewTitle = useRef<HTMLHeadingElement>(null)
   const stepTitle = useRef<HTMLHeadingElement>(null)
-  useUnsaved(Boolean(thresholdId || itemId || score || note || file || percent !== null))
+  useUnsaved(Boolean(thresholdId || itemId || score || note || certificateNumber || issuingBody || issuedOn || declaration || file || percent !== null))
   useEffect(() => () => uploadAbort.current?.abort(), [])
   useEffect(() => { if (preview && tab === 'history') previewTitle.current?.focus() }, [preview, tab])
   useEffect(() => { if (tab === 'upload') stepTitle.current?.focus() }, [step, tab])
@@ -66,7 +71,10 @@ export function EvidencePage() {
   const scoreValid = minimum === null || (score.trim() !== '' && Number.isFinite(Number(score)) && Number(score) >= minimum)
   const fileError = !file ? '' : file.size === 0 ? t('evidenceEmptyFile') : file.size > maxBytes ? t('uploadTooBig')
     : /^(application\/pdf|image\/png|image\/jpeg)$/.test(file.type) || /\.(pdf|png|jpe?g)$/i.test(file.name) ? '' : t('uploadType')
-  const ready = Boolean(selected && (!items.length || recognizedItem) && scoreValid && file && !fileError)
+  const identityRequired = selected?.code === 'ENGLISH' || selected?.code === 'CERTIFICATION'
+  const identityReady = !identityRequired || Boolean(certificateNumber.trim() && issuingBody.trim() && issuedOn)
+  const sourceUrl = recognizedItem ? officialSource(recognizedItem.nameZh, recognizedItem.nameEn) : null
+  const ready = Boolean(selected && (!items.length || recognizedItem) && scoreValid && identityReady && declaration && file && !fileError)
   const visibleStep = !selected ? 1 : step === 3 && !ready ? 2 : step
   const nameOf = (item?: Name | null) => item ? (locale === 'en' ? item.nameEn || item.nameZh : item.nameZh) : ''
 
@@ -109,6 +117,10 @@ export function EvidencePage() {
             if (recognizedItem) data.set('recognizedItemId', recognizedItem.id)
             if (score.trim()) data.set('scoreText', score.trim())
             if (note.trim()) data.set('note', note.trim())
+            if (certificateNumber.trim()) data.set('certificateNumber', certificateNumber.trim())
+            if (issuingBody.trim()) data.set('issuingBody', issuingBody.trim())
+            if (issuedOn) data.set('issuedOn', issuedOn)
+            data.set('declaration', declaration ? 'true' : 'false')
             data.set('files', file)
             const controller = new AbortController()
             uploadAbort.current = controller
@@ -120,6 +132,10 @@ export function EvidencePage() {
               setItemId('')
               setScore('')
               setNote('')
+              setCertificateNumber('')
+              setIssuingBody('')
+              setIssuedOn('')
+              setDeclaration(false)
               setFile(null)
               setStep(1)
               setPreview(null)
@@ -190,6 +206,20 @@ export function EvidencePage() {
                   aria-invalid={Boolean(score && !scoreValid)} aria-describedby={minimum === null ? undefined : 'evidence-minimum'} />
                 {minimum !== null && <span id="evidence-minimum" className={`mt-1 block text-xs ${score && !scoreValid ? 'text-[#9e1d22]' : 'text-muted'}`}>{t('recognizedMinimum')} {minimum}</span>}
               </label>
+              <label className="block text-sm font-semibold">{t('evidenceCertNumber')}{identityRequired ? '' : `（${locale === 'en' ? 'optional' : '選填'}）`}
+                <input className="field w-full" value={certificateNumber} maxLength={80} required={identityRequired} onChange={(event) => setCertificateNumber(event.target.value)} />
+              </label>
+              <label className="block text-sm font-semibold">{t('evidenceIssuer')}{identityRequired ? '' : `（${locale === 'en' ? 'optional' : '選填'}）`}
+                <input className="field w-full" value={issuingBody} maxLength={120} required={identityRequired} onChange={(event) => setIssuingBody(event.target.value)} />
+              </label>
+              <label className="block text-sm font-semibold">{t('evidenceIssuedOn')}{identityRequired ? '' : `（${locale === 'en' ? 'optional' : '選填'}）`}
+                <input className="field w-full" type="date" value={issuedOn} required={identityRequired} onChange={(event) => setIssuedOn(event.target.value)} />
+              </label>
+              {sourceUrl && <p className="text-sm"><a className="font-semibold text-teal underline underline-offset-2" href={sourceUrl} target="_blank" rel="noopener noreferrer">{t('evidenceOfficialLink')}<span className="sr-only">（另開新視窗）</span></a></p>}
+              <label className="flex items-start gap-2 text-sm font-semibold">
+                <input className="mt-1" type="checkbox" checked={declaration} required onChange={(event) => setDeclaration(event.target.checked)} />
+                <span>{t('evidenceDeclaration')}</span>
+              </label>
             </fieldset>
             <p className="mt-4 text-sm font-medium text-muted" id="evidence-file-hint">{t('evidenceFileHint')}</p>
             <p className="mt-1 text-sm text-muted" id="evidence-file-naming">{t('evidenceFileNaming')}</p>
@@ -220,6 +250,10 @@ export function EvidencePage() {
                 <div><dt>{t('graduationRequirements')}</dt><dd>{nameOf(selected)}</dd></div>
                 {recognizedItem && <div><dt>{t('evidenceRecognizedItem')}</dt><dd>{nameOf(recognizedItem)}</dd></div>}
                 {score.trim() && <div><dt>{t('score')}</dt><dd>{score.trim()}</dd></div>}
+                {certificateNumber.trim() && <div><dt>{t('evidenceCertNumber')}</dt><dd>{certificateNumber.trim()}</dd></div>}
+                {issuingBody.trim() && <div><dt>{t('evidenceIssuer')}</dt><dd>{issuingBody.trim()}</dd></div>}
+                {issuedOn && <div><dt>{t('evidenceIssuedOn')}</dt><dd>{issuedOn}</dd></div>}
+                <div><dt>{t('evidenceDeclaration')}</dt><dd>{declaration ? '✓' : ''}</dd></div>
                 <div><dt>{t('evidenceAttachStep')}</dt><dd>{file.name}</dd></div>
                 {note.trim() && <div><dt>{t('note')}</dt><dd className="whitespace-pre-wrap">{note.trim()}</dd></div>}
               </dl>
@@ -228,7 +262,7 @@ export function EvidencePage() {
             {message && <p className="login-result mt-3" role="alert">{message}</p>}
             <div className="evidence-submit">
               {visibleStep > 1 && <button type="button" className="btn btn-ghost mr-auto" disabled={busy} onClick={() => { setStep(visibleStep - 1); setMessage('') }}><ArrowLeft size={16} aria-hidden />{t('evidencePrevious')}</button>}
-              {visibleStep === 2 && !ready && !busy && !fileError && <p className="text-sm text-muted">{t(items.length && !recognizedItem ? 'evidencePickItem' : !scoreValid ? 'evidenceScoreNeeded' : 'needFile')}</p>}
+              {visibleStep === 2 && !ready && !busy && !fileError && <p className="text-sm text-muted">{t(items.length && !recognizedItem ? 'evidencePickItem' : !scoreValid ? 'evidenceScoreNeeded' : !identityReady || !declaration ? 'evidenceDetailsNeeded' : 'needFile')}</p>}
               <PendingButton className="btn btn-primary" type="submit" pending={busy} disabled={visibleStep === 1 ? !selected : !ready}>
                 {t(visibleStep === 3 ? 'submitEvidence' : 'next')}
                 {visibleStep !== 3 && <ArrowRight size={16} aria-hidden />}

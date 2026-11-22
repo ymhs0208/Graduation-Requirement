@@ -38,6 +38,7 @@ model User {
   resetTokens          PasswordReset[]
   submissions          Submission[]        @relation("StudentSubmissions")
   reviews              Submission[]        @relation("Reviewer")
+  verifiedEvidence     Submission[]        @relation("EvidenceVerifier")
   teacherNotes         Submission[]        @relation("SubmissionTeacher")
   commentsWritten      Comment[]           @relation("CommentAuthor")
   commentsAbout        Comment[]           @relation("CommentStudent")
@@ -161,6 +162,7 @@ model Threshold {
   deadlineYear    Int?
   deadlineSemester Int?
   sort            Int
+  requiresPaperOriginal Boolean @default(false)
   submissions     Submission[]
 
   @@unique([ruleSetId, code])
@@ -243,12 +245,23 @@ model Submission {
   teacherId              String?
   teacher                User?           @relation("SubmissionTeacher", fields: [teacherId], references: [id])
   reviewedAt             DateTime?
+  certificateNumber      String?
+  issuingBody            String?
+  issuedOn               DateTime?
+  declaredAt             DateTime?
+  declarationIp          String?
+  verifiedAt             DateTime?
+  verifiedById           String?
+  verifiedBy             User?           @relation("EvidenceVerifier", fields: [verifiedById], references: [id])
+  verificationMethod     String?
+  verificationNote       String?
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
   files                  Upload[]
 
   @@index([studentId, status])
   @@index([thresholdId])
+  @@index([certificateNumber])
 }
 
 model Upload {
@@ -259,7 +272,17 @@ model Upload {
   originalName String
   mimeType     String
   size         Int
+  sha256       String     @default("")
+  producer     String?
+  creator      String?
+  contentCreatedAt DateTime?
+  contentModifiedAt DateTime?
+  editedBySoftware Boolean @default(false)
+  modifiedAfterCreate Boolean @default(false)
+  hasDigitalSignature Boolean @default(false)
   createdAt    DateTime   @default(now())
+
+  @@index([sha256])
 }
 
 model Comment {

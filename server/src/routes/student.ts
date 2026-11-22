@@ -5,6 +5,7 @@ import { prisma } from '../db'
 import { audit } from '../audit'
 import { HttpError } from '../errors'
 import { displayUploadName, evidenceUploadName, removeStored, saveUpload } from '../files'
+import { inspectEvidence } from '../evidence-check'
 import { asyncHandler, requireRole, requireUser, type AuthedRequest } from '../http'
 import { notify } from '../mail'
 import { progressFor } from '../progress'
@@ -68,8 +69,13 @@ router.post(
         recognizedItemId: z.string().optional(),
         scoreText: z.string().max(40).optional(),
         note: z.string().max(500).optional(),
+        certificateNumber: z.string().trim().max(80).optional(),
+        issuingBody: z.string().trim().max(120).optional(),
+        issuedOn: z.string().trim().max(20).optional(),
+        declaration: z.string().optional(),
       })
       .parse(req.body)
+    if (body.declaration !== 'true') throw new HttpError(400, 'DECLARATION_REQUIRED')
     const user = await prisma.user.findUnique({ where: { id: req.userId } })
     if (!user?.cohortYear) throw new HttpError(400, 'VALIDATION')
     const threshold = await prisma.threshold.findFirst({
@@ -91,17 +97,29 @@ router.post(
         if (!Number.isFinite(score) || score < recognized.minScore) throw new HttpError(400, 'SCORE_TOO_LOW')
       }
     }
+    const identityRequired = threshold.code === 'ENGLISH' || threshold.code === 'CERTIFICATION'
+    const certificateNumber = body.certificateNumber?.trim() || null
+    const issuingBody = body.issuingBody?.trim() || null
+    const parsedIssued = body.issuedOn ? new Date(`${body.issuedOn}T00:00:00.000Z`) : null
+    if (body.issuedOn && (!parsedIssued || Number.isNaN(parsedIssued.getTime()))) throw new HttpError(400, 'VALIDATION')
+    const issuedOn = parsedIssued && !Number.isNaN(parsedIssued.getTime()) ? parsedIssued : null
+    if (identityRequired && (!certificateNumber || !issuingBody || !issuedOn)) throw new HttpError(400, 'EVIDENCE_DETAILS')
     const files = (req.files as Express.Multer.File[] | undefined) ?? []
     if (!files.length) throw new HttpError(400, 'FILE_TYPE')
     const uploadedAt = new Date()
-    const stored: { storageKey: string; originalName: string; mimeType: string; size: number }[] = []
+    const stored: {
+      storageKey: string; originalName: string; mimeType: string; size: number; sha256: string
+      producer: string | null; creator: string | null; contentCreatedAt: Date | null; contentModifiedAt: Date | null
+      editedBySoftware: boolean; modifiedAfterCreate: boolean; hasDigitalSignature: boolean
+    }[] = []
     let id: string
     try {
       for (const [index, file] of files.entries()) {
         const saved = await saveUpload(file.buffer)
         if (!saved) throw new HttpError(400, 'FILE_TYPE')
+        const meta = inspectEvidence(file.buffer, saved.mime)
         const originalName = evidenceUploadName(user.account, threshold.nameZh, uploadedAt, index + 1, saved.ext)
-        stored.push({ storageKey: saved.storageKey, originalName, mimeType: saved.mime, size: saved.size })
+        stored.push({ storageKey: saved.storageKey, originalName, mimeType: saved.mime, size: saved.size, ...meta })
       }
       id = await prisma.$transaction(async (tx) => {
         const submission = await tx.submission.create({
@@ -111,6 +129,11 @@ router.post(
             recognizedItemId: recognized?.id,
             scoreText: body.scoreText || null,
             note: body.note || null,
+            certificateNumber,
+            issuingBody,
+            issuedOn,
+            declaredAt: uploadedAt,
+            declarationIp: req.ip || null,
             files: { create: stored },
           },
           select: { id: true },
@@ -122,6 +145,7 @@ router.post(
           entityId: submission.id,
           summaryZh: `上傳 ${threshold.nameZh} 證明`,
           summaryEn: `Uploaded evidence for ${threshold.nameEn}`,
+          after: { declarationAcceptedAt: uploadedAt.toISOString(), userId: user.id, ip: req.ip || null, account: user.account },
         }, tx)
         return submission.id
       })
@@ -175,7 +199,7 @@ export function presentSubmission(submission: {
   teacherRecommendation: string | null
   createdAt: Date
   reviewedAt: Date | null
-  threshold?: { nameZh: string; nameEn: string; code: string }
+  threshold?: { id?: string; nameZh: string; nameEn: string; code: string; descriptionZh?: string; descriptionEn?: string }
   recognizedItem?: { nameZh: string; nameEn: string } | null
   files: { id: string; originalName: string; mimeType: string; size: number }[]
   student?: { id: string; account: string; nameZh: string; nameEn: string }
@@ -190,9 +214,21 @@ export function presentSubmission(submission: {
     teacherRecommendation: submission.teacherRecommendation,
     createdAt: submission.createdAt,
     reviewedAt: submission.reviewedAt,
-    threshold: submission.threshold,
+    threshold: submission.threshold && {
+      id: submission.threshold.id,
+      code: submission.threshold.code,
+      nameZh: submission.threshold.nameZh,
+      nameEn: submission.threshold.nameEn,
+      descriptionZh: submission.threshold.descriptionZh,
+      descriptionEn: submission.threshold.descriptionEn,
+    },
     recognizedItem: submission.recognizedItem,
-    files: submission.files.map((file) => ({ ...file, originalName: displayUploadName(file.originalName) })),
+    files: submission.files.map((file) => ({
+      id: file.id,
+      originalName: displayUploadName(file.originalName),
+      mimeType: file.mimeType,
+      size: file.size,
+    })),
     student: submission.student,
   }
 }

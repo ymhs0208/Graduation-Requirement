@@ -13,6 +13,7 @@ import { anonymizeUser, purgeRetention, retentionCandidates, runPreaudit, runRem
 import { progressFor } from '../progress'
 import { issueActivation } from './auth'
 import { presentSubmission, tellStudentReviewed } from './student'
+import { adminAuthenticity } from '../evidence-risk'
 import { accountFormatIssue, emailIssue, inspectCredits } from '../csv-import'
 import { buildPreview, commitPreview, errorsBody, loadCreditContext, previewBody, readPreview, templateBody } from '../import-commit'
 
@@ -548,7 +549,10 @@ router.get(
       include: { files: true, threshold: true, recognizedItem: true, student: { select: { id: true, account: true, nameZh: true, nameEn: true } } },
       orderBy: { createdAt: 'asc' },
     })
-    res.json({ submissions: submissions.map(presentSubmission) })
+    const authenticity = await adminAuthenticity(submissions.map((item) => ({ ...item, studentId: item.studentId })))
+    res.json({
+      submissions: submissions.map((item) => ({ ...presentSubmission(item), authenticity: authenticity.get(item.id) })),
+    })
   }),
 )
 
@@ -556,14 +560,37 @@ router.post(
   '/reviews/:id',
   asyncHandler(async (req: AuthedRequest, res) => {
     const body = z
-      .object({ decision: z.enum(['APPROVED', 'REJECTED']), comment: z.string().trim().max(1000).optional() })
+      .object({
+        decision: z.enum(['APPROVED', 'REJECTED']),
+        comment: z.string().trim().max(1000).optional(),
+        verified: z.boolean().optional(),
+        verificationMethod: z.enum(['OFFICIAL_SITE', 'PAPER_ORIGINAL', 'OTHER']).optional(),
+        verificationNote: z.string().trim().max(500).optional(),
+      })
       .parse(req.body)
+    if (body.verified && !body.verificationMethod) throw new HttpError(400, 'VALIDATION')
+    if (body.verificationMethod === 'OTHER' && !body.verificationNote) throw new HttpError(400, 'VALIDATION')
     const submission = await prisma.submission.findUnique({ where: { id: pid(req.params.id) }, include: { threshold: true } })
     if (!submission) throw new HttpError(404, 'NOT_FOUND')
+    const verifiedNow = Boolean(body.verified && body.verificationMethod)
+    if (body.decision === 'APPROVED' && submission.threshold.requiresPaperOriginal && !submission.verifiedAt && !verifiedNow) {
+      throw new HttpError(400, 'VERIFICATION_REQUIRED')
+    }
     await prisma.$transaction(async (tx) => {
       const updated = await tx.submission.updateMany({
         where: { id: submission.id, status: 'PENDING' },
-        data: { status: body.decision, reviewComment: body.comment || null, reviewerId: req.userId, reviewedAt: new Date() },
+        data: {
+          status: body.decision,
+          reviewComment: body.comment || null,
+          reviewerId: req.userId,
+          reviewedAt: new Date(),
+          ...(verifiedNow ? {
+            verifiedAt: new Date(),
+            verifiedById: req.userId,
+            verificationMethod: body.verificationMethod,
+            verificationNote: body.verificationNote || null,
+          } : {}),
+        },
       })
       if (!updated.count) throw new HttpError(409, 'REVIEW_ALREADY_COMPLETED', {
         zh: '這筆證明已完成審核，請重新整理清單。', en: 'This evidence has already been reviewed. Refresh the queue.',
@@ -572,7 +599,8 @@ router.post(
         actorId: req.userId, action: 'submission.review', entityType: 'submission', entityId: submission.id,
         summaryZh: `${body.decision === 'APPROVED' ? '核可' : '退回'} ${submission.threshold.nameZh}`,
         summaryEn: `${body.decision === 'APPROVED' ? 'Approved' : 'Rejected'} ${submission.threshold.nameEn}`,
-        before: { status: 'PENDING' }, after: { status: body.decision },
+        before: { status: 'PENDING' },
+        after: { status: body.decision, verified: verifiedNow, verificationMethod: body.verificationMethod ?? null, ip: req.ip || null },
       }, tx)
     })
     try {
@@ -582,6 +610,27 @@ router.post(
       return res.json({ ok: true, notificationFailed: true })
     }
     res.json({ ok: true })
+  }),
+)
+
+router.patch(
+  '/thresholds/:id',
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const body = z.object({ requiresPaperOriginal: z.boolean() }).parse(req.body)
+    const before = await prisma.threshold.findUnique({ where: { id: pid(req.params.id) } })
+    if (!before) throw new HttpError(404, 'NOT_FOUND')
+    const updated = await prisma.threshold.update({ where: { id: before.id }, data: { requiresPaperOriginal: body.requiresPaperOriginal } })
+    await audit({
+      actorId: req.userId,
+      action: 'threshold.paper-original',
+      entityType: 'threshold',
+      entityId: updated.id,
+      summaryZh: `${updated.nameZh}${body.requiresPaperOriginal ? '改為須核對紙本正本' : '取消紙本正本核對'}`,
+      summaryEn: `${updated.nameEn} ${body.requiresPaperOriginal ? 'now requires a paper original' : 'no longer requires a paper original'}`,
+      before: { requiresPaperOriginal: before.requiresPaperOriginal },
+      after: { requiresPaperOriginal: updated.requiresPaperOriginal },
+    })
+    res.json({ ok: true, requiresPaperOriginal: updated.requiresPaperOriginal })
   }),
 )
 

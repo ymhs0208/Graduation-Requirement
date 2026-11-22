@@ -34,6 +34,9 @@ export const messages: Record<string, { zh: string; en: string }> = {
   BAD_COHORT: { zh: '入學年度必須是已建立規則的民國年（100–200）。', en: 'The cohort must be a ROC year from 100 to 200 that already has rules.' },
   BAD_CLASS: { zh: '這個入學年度沒有這個班級。', en: 'That class does not exist for the cohort.' },
   SERVER: { zh: '系統暫時無法完成，請稍後再試。', en: 'The system could not finish that. Try again.' },
+  DECLARATION_REQUIRED: { zh: '請先勾選文件真實性聲明。', en: 'Confirm the authenticity declaration before uploading.' },
+  VERIFICATION_REQUIRED: { zh: '此條件須核對紙本正本後才能核可。', en: 'This requirement needs a paper-original check before it can be approved.' },
+  EVIDENCE_DETAILS: { zh: '英文檢定與專業證照須填證號、發證單位與日期。', en: 'English tests and certificates need a certificate number, issuer, and date.' },
 }
 
 export const importIssues: Record<string, { zh: string; en: string }> = {
