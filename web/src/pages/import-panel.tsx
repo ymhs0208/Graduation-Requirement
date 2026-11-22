@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useLock, useUnsaved } from '../components/confirm'
 import { PendingLabel, StepStatus, UploadProgress } from '../components/feedback'
-import { api, errorMessage } from '../lib/api'
+import { api, errorMessage, fetchAuthenticatedFile } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 
 type Kind = 'accounts' | 'credits'
@@ -22,7 +23,7 @@ const tone: Record<Status, string> = {
 }
 
 async function download(path: string, filename: string) {
-  const response = await fetch(path, { credentials: 'include' })
+  const response = await fetchAuthenticatedFile(path)
   if (!response.ok) return
   const blob = await response.blob()
   const url = URL.createObjectURL(blob)
@@ -36,6 +37,8 @@ async function download(path: string, filename: string) {
 export function ImportPanel() {
   const { t, locale } = useI18n()
   const { busy, run } = useLock()
+  const client = useQueryClient()
+  const fileInput = useRef<HTMLInputElement | null>(null)
   const [kind, setKind] = useState<Kind>('accounts')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -53,33 +56,46 @@ export function ImportPanel() {
     <section className="card space-y-4 p-4 sm:p-5">
       <div>
         <h2 className="text-lg font-bold">{t('importTitle')}</h2>
-        <p className="mt-1 text-sm leading-6 text-muted">{t('importHint')}</p>
+        <p className="mt-1 text-sm leading-6 text-muted">{t('importPreviewNote')}</p>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <fieldset className="flex flex-wrap gap-2">
+        <legend className="mb-2 text-sm font-semibold">{t('importPickType')}</legend>
         {(['accounts', 'credits'] as const).map((item) => (
-          <button key={item} className={`btn ${kind === item ? 'btn-ink' : 'btn-ghost'}`} type="button" aria-pressed={kind === item} onClick={() => { setKind(item); setPreview(null); setPasswords([]) }}>
+          <button key={item} className={`btn ${kind === item ? 'btn-ink' : 'btn-ghost'}`} type="button" disabled={busy} aria-pressed={kind === item} onClick={() => {
+            if (kind === item) return
+            setKind(item)
+            setPreview(null)
+            setFile(null)
+            setConflict('skip')
+            setPasswords([])
+            setMessage('')
+            if (fileInput.current) fileInput.current.value = ''
+          }}>
             {item === 'accounts' ? t('importKindAccounts') : t('importKindCredits')}
           </button>
         ))}
         <button className="btn btn-ghost" type="button" onClick={() => download(`/api/admin/import/template?kind=${kind}`, `${kind}-template.csv`)}>
           {t('importTemplate')}
         </button>
-      </div>
+      </fieldset>
       <label className="block text-sm font-medium">
-        CSV
+        {t('importPickFile')}
         <input
           className="field w-full"
+          ref={fileInput}
+          disabled={busy}
           type="file"
           accept=".csv,text/csv"
           onChange={(event) => {
             setFile(event.target.files?.[0] ?? null)
             setPreview(null)
+            setConflict('skip')
             setPasswords([])
             setMessage('')
           }}
         />
       </label>
-      {fileNote && <p className="text-sm font-medium text-[#9e1d22]">{fileNote}</p>}
+      {fileNote && <p className={`text-sm ${file ? 'font-medium text-[#9e1d22]' : 'text-muted'}`}>{fileNote}</p>}
       <button
         className="btn btn-primary"
         type="button"
@@ -108,7 +124,7 @@ export function ImportPanel() {
           })
         }
       >
-        <PendingLabel pending={busy && percent !== null}>{t('importPreview')}</PendingLabel>
+        <PendingLabel pending={busy && percent !== null}>{t('importCheckFile')}</PendingLabel>
       </button>
       {percent !== null && <UploadProgress percent={percent} onCancel={() => uploadAbort.current?.abort()} />}
       {preview && (
@@ -178,6 +194,8 @@ export function ImportPanel() {
                     setMessage(`${t('importResult')} ${result.committed} / ${result.updated} / ${result.skipped}`)
                     setPreview(null)
                     setFile(null)
+                    if (fileInput.current) fileInput.current.value = ''
+                    if (kind === 'accounts') await client.invalidateQueries({ queryKey: ['users'] })
                   } catch (error) {
                     setMessage(errorMessage(error, locale, t('error')))
                   } finally {

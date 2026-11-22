@@ -13,8 +13,13 @@ async function signIn(page: Page, account: string, password: string, code?: stri
   await page.goto('/login')
   await page.getByLabel('學號或教職員編號').fill(account)
   await page.getByLabel('密碼', { exact: true }).fill(password)
-  if (code) await page.getByLabel('驗證碼').fill(code)
+  await expect(page.getByLabel('驗證碼', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '登入', exact: true }).click()
+  if (code) {
+    await expect(page.getByRole('heading', { name: '管理員雙因素驗證' })).toBeVisible()
+    await page.getByLabel('驗證碼', { exact: true }).fill(code)
+    await page.getByRole('button', { name: '驗證並登入', exact: true }).click()
+  }
 }
 
 test('login page has no WCAG 2.1 AA violations', async ({ page }) => {

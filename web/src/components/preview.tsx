@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useI18n } from '../lib/i18n'
+import { fetchAuthenticatedFile } from '../lib/api'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -23,7 +24,7 @@ export function DocumentPreview({ fileId }: { fileId: string }) {
     setError('')
     setPage(1)
     ;(async () => {
-      const response = await fetch(`/api/files/${fileId}?disposition=inline`, { credentials: 'include' })
+      const response = await fetchAuthenticatedFile(`/api/files/${fileId}?disposition=inline`)
       if (!response.ok) {
         if (!cancelled) setError('preview')
         return

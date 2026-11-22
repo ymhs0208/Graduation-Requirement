@@ -9,8 +9,8 @@ export async function audit(input: {
   summaryEn: string
   before?: unknown
   after?: unknown
-}) {
-  await prisma.auditLog.create({
+}, db: Pick<typeof prisma, 'auditLog'> = prisma) {
+  await db.auditLog.create({
     data: {
       actorId: input.actorId ?? null,
       action: input.action,

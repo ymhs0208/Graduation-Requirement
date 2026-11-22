@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { BrowserRouter } from 'react-router-dom'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
@@ -9,100 +9,208 @@ import { ConfirmProvider } from './components/confirm'
 import { ConnectionBanner, PageSkeleton, PendingButton, RouteProgress } from './components/feedback'
 import { Toaster } from 'sonner'
 import { Shell, SiteFooter, SkipLink, type SessionUser } from './components/shell'
-import { errorMessage, api } from './lib/api'
+import { ApiError, errorMessage, api, onSessionLost } from './lib/api'
 import { I18nProvider, useI18n } from './lib/i18n'
-import { AdminAudit, AdminRecognized, AdminRetention, AdminReviews, AdminRules, AdminStats, AdminUsers } from './pages/admin'
+import { AdminAudit, AdminReviews, AdminStats } from './pages/admin'
+import { AdminRetention } from './pages/admin-retention'
+import { AdminRecognized } from './pages/admin-recognized'
+import { AdminRules } from './pages/admin-rules'
+import { AdminPlan } from './pages/admin-plan'
+import { AdminAnnouncements } from './pages/admin-announcements'
+import { AdminUsers } from './pages/admin-users'
 import { HelpPage } from './pages/help'
-import { EvidencePage, NotificationsPage, PlanPage, StudentHome } from './pages/student'
-import { TeacherHome, TeacherStudent } from './pages/teacher'
+import { NotificationsPage, PlanPage, StudentHome } from './pages/student'
+import { EvidencePage } from './pages/student-evidence'
+import { TeacherHome } from './pages/teacher'
+import { TeacherStudent } from './pages/teacher-student'
 
 const client = new QueryClient()
 
 type Me = { user: SessionUser; csrfToken: string }
+type LoginState = { reason?: 'required' | 'expired'; returnTo?: string }
+
+function loginDestination(value: unknown) {
+  if (typeof value !== 'string') return '/'
+  try {
+    const url = new URL(value, window.location.origin)
+    return url.origin === window.location.origin && url.pathname !== '/login' && url.pathname !== '/reset' ? url.href : '/'
+  } catch {
+    return '/'
+  }
+}
 
 function LoginPage() {
-  const { t, locale } = useI18n()
+  const { t, locale, setLocale } = useI18n()
+  const location = useLocation()
+  const loginState = location.state as LoginState | null
+  const reason = loginState?.reason
+  useEffect(() => { client.clear() }, [])
   const [message, setMessage] = useState('')
+  const [recoverySent, setRecoverySent] = useState(false)
   const [pending, setPending] = useState(false)
   const [forgot, setForgot] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [verification, setVerification] = useState<{ account: string; password: string } | null>(null)
+  const [code, setCode] = useState('')
   const schema = z.object({
     account: z.string().min(4),
-    password: z.string().min(1),
-    totp: z.string().optional(),
+    password: forgot ? z.string().optional() : z.string().min(1),
   })
-  const form = useForm({ resolver: zodResolver(schema), defaultValues: { account: '', password: '', totp: '' } })
+  const form = useForm({ resolver: zodResolver(schema), defaultValues: { account: '', password: '' } })
+  const errors = form.formState.errors
+
+  function toggleRecovery() {
+    setForgot(!forgot)
+    setMessage('')
+    setRecoverySent(false)
+    setShowPassword(false)
+    form.clearErrors()
+  }
+
   return (
     <>
-    <SkipLink />
-    <div className="flex min-h-screen flex-col">
-    <main id="main" tabIndex={-1} className="grid flex-1 outline-none lg:grid-cols-[1.05fr_0.95fr]">
-      <div className="relative hidden overflow-hidden bg-pine text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="absolute inset-x-0 top-0 h-1 bg-gold" />
-        <img src="/brand/program-wordmark.png" alt={t('program')} className="h-16 w-fit rounded-xl bg-white object-contain p-2 shadow-md" />
-        <div>
-          <p className="text-xs font-semibold tracking-[0.18em] text-white/75">NATIONAL TAICHUNG UNIVERSITY OF SCIENCE AND TECHNOLOGY</p>
-          <p className="mt-4 text-4xl font-bold tracking-tight">國立臺中科技大學</p>
-          <p className="mt-2 text-lg text-white/90">人工智慧應用工程學士學位學程</p>
-          <p className="mt-6 max-w-md text-sm leading-7 text-white/80">從入學看到畢業，規則、學分與證明放在同一頁。</p>
-        </div>
-        <p className="text-xs text-white/70">畢業門檻追蹤</p>
-      </div>
-      <div className="flex items-center justify-center bg-paper px-5 py-12">
-        <form
-          className="card w-full max-w-md space-y-4 p-6 sm:p-8"
-          onSubmit={form.handleSubmit(async (values) => {
-            setMessage('')
-            setPending(true)
-            try {
-              if (forgot) {
-                await api('/api/auth/forgot', { method: 'POST', body: { account: values.account }, success: t('forgotSent') })
-                setMessage(t('forgotSent'))
-                return
-              }
-              await api('/api/auth/login', { method: 'POST', body: values })
-              window.location.href = '/'
-            } catch (error) {
-              setMessage(errorMessage(error, locale, t('error')))
-            } finally {
-              setPending(false)
-            }
-          })}
-        >
-          <img src="/brand/program-mark.png" alt={t('program')} className="h-14 w-14 rounded-xl bg-white object-contain p-1 ring-1 ring-line lg:hidden" />
-          <div>
-            <p className="text-xs font-semibold tracking-wide text-teal lg:hidden">國立臺中科技大學</p>
-            <h1 className="text-2xl font-bold tracking-tight text-ink">{t('login')}</h1>
-            <p className="mt-1 text-sm text-muted">{t('program')}</p>
+      <SkipLink />
+      <div className="login-layout">
+        <header className="login-header">
+          <div className="login-brand">
+            <p>{t('university')}</p>
+            <p>{t('program')}</p>
           </div>
-          <label className="block text-sm font-medium text-ink">
-            {t('account')}
-            <input className="field w-full" {...form.register('account')} />
-          </label>
-          {!forgot && (
-            <label className="block text-sm font-medium text-ink">
-              {t('password')}
-              <input className="field w-full" type="password" {...form.register('password')} />
-            </label>
-          )}
-          {!forgot && (
-            <label className="block text-sm font-medium text-ink">
-              {t('totp')}
-              <input className="field w-full" inputMode="numeric" {...form.register('totp')} />
-              <span className="mt-1 block text-xs font-normal text-muted">{t('totpHint')}</span>
-            </label>
-          )}
-          {message && <p className="rounded-xl bg-[#fdecee] px-3 py-2 text-sm font-medium text-[#9e1d22]">{message}</p>}
-          <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
-            {forgot ? t('forgot') : t('login')}
-          </PendingButton>
-          <button className="text-sm font-medium text-teal underline-offset-2 hover:underline" type="button" onClick={() => setForgot(!forgot)}>
-            {t('forgot')}
+          <button className="btn btn-ghost login-language" type="button" onClick={() => setLocale(locale === 'en' ? 'zh-Hant' : 'en')}>
+            {t('language')}
           </button>
-        </form>
+        </header>
+        <main id="main" tabIndex={-1} className="login-main outline-none">
+          <div className="login-hero">
+            <img className="login-seal" src="/brand/university-seal.jpg" width="319" height="320" alt={t('universitySeal')} />
+            <div className="login-hero-copy">
+              <p className="login-hero-title">{t('loginHeroTitle')}</p>
+              <p className="login-hero-summary">{t('loginHeroSummary')}</p>
+            </div>
+          </div>
+          <div className="login-panel">
+            {verification ? (
+              <form
+                key="verification"
+                className="login-form"
+                onSubmit={async (event) => {
+                  event.preventDefault()
+                  if (pending) return
+                  setMessage('')
+                  setPending(true)
+                  try {
+                    await api('/api/auth/login', {
+                      method: 'POST',
+                      body: { ...verification, totp: code },
+                      silent: true,
+                    })
+                    window.location.replace(loginDestination(loginState?.returnTo))
+                  } catch (error) {
+                    setMessage(errorMessage(error, locale, t('error')))
+                  } finally {
+                    setPending(false)
+                  }
+                }}
+              >
+                <div className="login-intro">
+                  <h1>{t('loginVerification')}</h1>
+                  <p id="login-totp-hint">{t('totpHint')}</p>
+                </div>
+                <div className="login-control">
+                  <label htmlFor="login-totp">{t('totp')}</label>
+                  <div className="login-input">
+                    <input
+                      id="login-totp"
+                      className="field font-mono tracking-[.25em]"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      aria-describedby="login-totp-hint"
+                      value={code}
+                      onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                      required
+                      pattern="[0-9]{6}"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                {message && <p className="login-result" role="alert">{message}</p>}
+                <PendingButton className="btn btn-primary login-submit" type="submit" pending={pending}>{t('verifyAndSignIn')}</PendingButton>
+                <button className="login-recovery" type="button" disabled={pending} onClick={() => {
+                  setVerification(null)
+                  setCode('')
+                  setMessage('')
+                }}>
+                  {t('backToLogin')}
+                </button>
+              </form>
+            ) : (
+              <form
+                key="credentials"
+                className="login-form"
+                onSubmit={form.handleSubmit(async (values) => {
+                  if (pending) return
+                  setMessage('')
+                  setRecoverySent(false)
+                  setPending(true)
+                  try {
+                    if (forgot) {
+                      await api('/api/auth/forgot', { method: 'POST', body: { account: values.account } })
+                      setRecoverySent(true)
+                      setMessage(t('forgotSent'))
+                      return
+                    }
+                    await api('/api/auth/login', { method: 'POST', body: values, silent: true })
+                    window.location.replace(loginDestination(loginState?.returnTo))
+                  } catch (error) {
+                    if (!forgot && values.password && error instanceof ApiError && error.code === 'TOTP_REQUIRED') {
+                      setVerification({ account: values.account, password: values.password })
+                      setShowPassword(false)
+                      form.resetField('password')
+                      return
+                    }
+                    setMessage(errorMessage(error, locale, t('error')))
+                  } finally {
+                    setPending(false)
+                  }
+                })}
+              >
+                <div className="login-intro">
+                  <h1>{forgot ? t('forgot') : t('loginHeading')}</h1>
+                  <p>{forgot ? t('recoveryIntro') : t('loginIntro')}</p>
+                </div>
+                {!forgot && reason && <p className="inset-panel text-sm" role="status">{t(reason === 'expired' ? 'sessionExpired' : 'signInRequired')}</p>}
+                <div className="login-control">
+                  <label htmlFor="login-account">{t('account')}</label>
+                  <div className="login-input">
+                    <input id="login-account" className="field" autoComplete="username" aria-invalid={!!errors.account} aria-describedby={errors.account ? 'login-account-error' : undefined} {...form.register('account')} />
+                  </div>
+                  {errors.account && <p id="login-account-error" className="login-error">{t('loginAccountError')}</p>}
+                </div>
+                {!forgot && (
+                  <div className="login-control">
+                    <label htmlFor="login-password">{t('password')}</label>
+                    <div className="login-input login-input-password">
+                      <input id="login-password" className="field" type={showPassword ? 'text' : 'password'} autoComplete="current-password" aria-invalid={!!errors.password} aria-describedby={errors.password ? 'login-password-error' : undefined} {...form.register('password')} />
+                      <button className="login-visibility" type="button" onClick={() => setShowPassword(!showPassword)}>
+                        {t(showPassword ? 'hidePassword' : 'showPassword')}
+                      </button>
+                    </div>
+                    {errors.password && <p id="login-password-error" className="login-error">{t('loginPasswordError')}</p>}
+                  </div>
+                )}
+                {message && <p className={recoverySent ? 'login-result login-result-success' : 'login-result'} role={recoverySent ? 'status' : 'alert'}>{message}</p>}
+                <PendingButton className="btn btn-primary login-submit" type="submit" pending={pending}>
+                  {forgot ? t('sendRecovery') : t('login')}
+                </PendingButton>
+                <button className="login-recovery" type="button" disabled={pending} onClick={toggleRecovery}>
+                  {forgot ? t('backToLogin') : t('forgot')}
+                </button>
+              </form>
+            )}
+          </div>
+        </main>
+        <SiteFooter />
       </div>
-    </main>
-    <SiteFooter />
-    </div>
     </>
   )
 }
@@ -114,12 +222,9 @@ function PasswordPage() {
   const schema = z.object({ currentPassword: z.string().min(1), nextPassword: z.string().min(12) })
   const form = useForm({ resolver: zodResolver(schema) })
   return (
-    <>
-    <SkipLink />
-    <div className="flex min-h-screen flex-col bg-paper">
-    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center px-4 py-16 outline-none">
+    <AccountFrame title={t('changePassword')} description={t('passwordRule')}>
       <form
-        className="card w-full max-w-md space-y-4 p-6 sm:p-8"
+        className="space-y-4"
         onSubmit={form.handleSubmit(async (values) => {
           setPending(true)
           setMessage('')
@@ -133,20 +238,14 @@ function PasswordPage() {
           }
         })}
       >
-        <img src="/brand/program-mark.png" alt={t('program')} className="h-12 w-12 rounded-xl object-contain" />
-        <h1 className="text-2xl font-bold tracking-tight">{t('changePassword')}</h1>
-        <p className="text-sm text-muted">{t('passwordRule')}</p>
-        <input className="field w-full" type="password" aria-label={t('currentPassword')} placeholder={t('currentPassword')} {...form.register('currentPassword')} />
-        <input className="field w-full" type="password" aria-label={t('nextPassword')} placeholder={t('nextPassword')} {...form.register('nextPassword')} />
-        {message && <p className="text-sm font-medium text-[#9e1d22]">{message}</p>}
+        <label className="block text-sm font-semibold">{t('currentPassword')}<input className="field w-full" type="password" autoComplete="current-password" required {...form.register('currentPassword')} /></label>
+        <label className="block text-sm font-semibold">{t('nextPassword')}<input className="field w-full" type="password" autoComplete="new-password" minLength={12} required {...form.register('nextPassword')} /></label>
+        {message && <p className="login-result" role="alert">{message}</p>}
         <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
-          {t('save')}
+          {t('savePassword')}
         </PendingButton>
       </form>
-    </main>
-    <SiteFooter />
-    </div>
-    </>
+    </AccountFrame>
   )
 }
 
@@ -158,12 +257,9 @@ function ResetPage() {
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState(false)
   return (
-    <>
-    <SkipLink />
-    <div className="flex min-h-screen flex-col bg-paper">
-    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center px-4 py-16 outline-none">
+    <AccountFrame title={t('resetPasswordHeading')} description={t('passwordRule')}>
       <form
-        className="card w-full max-w-md space-y-4 p-6 sm:p-8"
+        className="space-y-4"
         onSubmit={async (event) => {
           event.preventDefault()
           setPending(true)
@@ -178,18 +274,13 @@ function ResetPage() {
           }
         }}
       >
-        <img src="/brand/program-mark.png" alt={t('program')} className="h-12 w-12 rounded-xl object-contain" />
-        <h1 className="text-2xl font-bold tracking-tight">{t('changePassword')}</h1>
-        <input className="field w-full" type="password" aria-label={t('nextPassword')} value={password} onChange={(event) => setPassword(event.target.value)} />
-        {message && <p className="rounded-xl bg-[#fdecee] px-3 py-2 text-sm font-medium text-[#9e1d22]">{message}</p>}
+        <label className="block text-sm font-semibold">{t('nextPassword')}<input className="field w-full" type="password" autoComplete="new-password" minLength={12} required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        {message && <p className="login-result" role="alert">{message}</p>}
         <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
-          {t('save')}
+          {t('savePassword')}
         </PendingButton>
       </form>
-    </main>
-    <SiteFooter />
-    </div>
-    </>
+    </AccountFrame>
   )
 }
 
@@ -202,12 +293,9 @@ function TotpPage() {
     api<{ secret: string }>('/api/auth/totp/setup', { method: 'POST', body: {} }).then((data) => setSecret(data.secret))
   }, [])
   return (
-    <>
-    <SkipLink />
-    <div className="flex min-h-screen flex-col bg-paper">
-    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center px-4 py-16 outline-none">
+    <AccountFrame title={t('setupTotp')} description={t('totpSetupGuide')}>
       <form
-        className="card w-full max-w-md space-y-4 p-6 sm:p-8"
+        className="space-y-4"
       onSubmit={async (event) => {
         event.preventDefault()
         setPending(true)
@@ -219,30 +307,64 @@ function TotpPage() {
         }
       }}
       >
-        <img src="/brand/program-mark.png" alt={t('program')} className="h-12 w-12 rounded-xl object-contain" />
-        <h1 className="text-2xl font-bold tracking-tight">{t('setupTotp')}</h1>
-        <p className="break-all rounded-xl bg-[#eef1f6] p-3 font-mono text-sm text-ink">{secret}</p>
-        <input className="field w-full" aria-label={t('totp')} value={token} onChange={(event) => setToken(event.target.value)} />
-        <PendingButton className="btn btn-primary w-full" type="submit" pending={pending}>
-          {t('save')}
+        <div className="inset-panel">
+          <p className="text-xs font-semibold text-muted">{t('verificationKey')}</p>
+          <p className="mt-1 break-all font-mono text-sm">{secret || '—'}</p>
+        </div>
+        <label className="block text-sm font-semibold">{t('totp')}<input className="field w-full" inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" value={token} onChange={(event) => setToken(event.target.value.replace(/\D/g, '').slice(0, 6))} /></label>
+        <PendingButton className="btn btn-primary w-full" type="submit" pending={pending} disabled={!secret}>
+          {t('enableVerification')}
         </PendingButton>
       </form>
-    </main>
-    <SiteFooter />
+    </AccountFrame>
+  )
+}
+
+function AccountFrame({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  const { t } = useI18n()
+  return (
+    <div className="login-layout">
+      <SkipLink />
+      <main id="main" tabIndex={-1} className="account-main outline-none">
+        <section className="card account-card">
+          <header className="account-heading">
+            <img src="/brand/program-mark.png" alt="" width="36" height="36" />
+            <p>{t('university')}</p>
+            <h1>{title}</h1>
+          </header>
+          <div className="account-content">
+            {description && <p className="mb-4 text-sm text-muted">{description}</p>}
+            {children}
+          </div>
+        </section>
+      </main>
+      <SiteFooter />
     </div>
-    </>
   )
 }
 
 function Gate() {
   const { setLocale, t } = useI18n()
-  const query = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/auth/me'), retry: false })
+  const location = useLocation()
+  const [sessionLost, setSessionLost] = useState(false)
+  const query = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/auth/me', { silent: true }), retry: false })
   const user = query.data?.user
+  useEffect(() => onSessionLost(() => setSessionLost(true)), [])
   useEffect(() => {
     if (user?.locale === 'en' || user?.locale === 'zh-Hant') setLocale(user.locale)
   }, [user?.locale, setLocale])
   if (query.isLoading) return <div className="flex min-h-screen flex-col"><main id="main" className="flex-1 p-8"><PageSkeleton /></main><SiteFooter /></div>
-  if (query.isError || !query.data || !user) return <LoginPage />
+  if (sessionLost || (query.error instanceof ApiError && query.error.code === 'UNAUTHENTICATED')) {
+    return <Navigate replace to="/login" state={{
+      reason: sessionLost || user ? 'expired' : 'required',
+      returnTo: `${location.pathname}${location.search}${location.hash}`,
+    } satisfies LoginState} />
+  }
+  if (!user) return (
+    <AccountFrame title={t('loadFailed')}>
+      <PendingButton type="button" className="btn btn-primary" pending={query.isFetching} onClick={() => void query.refetch()}>{t('tryAgain')}</PendingButton>
+    </AccountFrame>
+  )
   if (user.mustChangePassword) return <PasswordPage />
   if (user.role === 'ADMIN' && !user.totpEnabled) return <TotpPage />
   const home = user.role === 'ADMIN' ? '/admin' : user.role === 'TEACHER' ? '/teacher' : '/'
@@ -258,7 +380,7 @@ function Gate() {
         <Route path="/" element={user.role === 'STUDENT' ? <StudentHome /> : <Navigate to={home} replace />} />
         <Route path="/plan" element={<PlanPage />} />
         <Route path="/evidence" element={<EvidencePage />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/notifications" element={<NotificationsPage canPublish={user.role === 'ADMIN'} />} />
         <Route path="/help" element={<HelpPage role={user.role} />} />
         <Route path="/teacher" element={user.role === 'TEACHER' ? <TeacherHome /> : <Navigate to={home} replace />} />
         <Route path="/teacher/:id" element={user.role === 'TEACHER' ? <TeacherStudent /> : <Navigate to={home} replace />} />
@@ -266,6 +388,8 @@ function Gate() {
         <Route path="/admin/reviews" element={user.role === 'ADMIN' ? <AdminReviews /> : <Navigate to={home} replace />} />
         <Route path="/admin/users" element={user.role === 'ADMIN' ? <AdminUsers /> : <Navigate to={home} replace />} />
         <Route path="/admin/rules" element={user.role === 'ADMIN' ? <AdminRules /> : <Navigate to={home} replace />} />
+        <Route path="/admin/plan" element={user.role === 'ADMIN' ? <AdminPlan /> : <Navigate to={home} replace />} />
+        <Route path="/admin/announcements" element={user.role === 'ADMIN' ? <AdminAnnouncements /> : <Navigate to={home} replace />} />
         <Route path="/admin/recognized" element={user.role === 'ADMIN' ? <AdminRecognized /> : <Navigate to={home} replace />} />
         <Route path="/admin/audit" element={user.role === 'ADMIN' ? <AdminAudit /> : <Navigate to={home} replace />} />
         <Route path="/admin/retention" element={user.role === 'ADMIN' ? <AdminRetention /> : <Navigate to={home} replace />} />

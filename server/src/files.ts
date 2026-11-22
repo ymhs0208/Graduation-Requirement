@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { randomBytes } from 'crypto'
+import { isUtf8 } from 'node:buffer'
 import { env } from './env'
 
 export function sniff(buf: Buffer): { mime: string; ext: string } | null {
@@ -25,7 +26,7 @@ export async function saveUpload(buf: Buffer) {
   const full = path.resolve(env.uploadDir, storageKey)
   if (!full.startsWith(path.resolve(env.uploadDir) + path.sep)) return null
   await fs.writeFile(full, buf)
-  return { storageKey, mime: kind.mime, size: buf.length }
+  return { storageKey, mime: kind.mime, ext: kind.ext, size: buf.length }
 }
 
 export function resolveStored(storageKey: string) {
@@ -42,6 +43,58 @@ export async function removeStored(storageKey: string) {
   await fs.rm(full, { force: true })
 }
 
-export function safeDownloadName(name: string) {
-  return name.replace(/[\r\n"]/g, '_').slice(0, 180)
+const maxFileNameLength = 180
+
+const uploadTime = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Taipei',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+
+function uploadNamePart(value: string, fallback: string) {
+  return value.replace(/[<>:"/\\|?*\p{Cc}\uD800-\uDFFF]/gu, '-').trim().replace(/^[. ]+|[. ]+$/g, '') || fallback
+}
+
+export function evidenceUploadName(account: string, threshold: string, uploadedAt: Date, sequence: number, extension: string) {
+  const { year, month, day, hour, minute, second } = Object.fromEntries(
+    uploadTime.formatToParts(uploadedAt).map(({ type, value }) => [type, value]),
+  )
+  const timestamp = `${year}${month}${day}-${hour}${minute}${second}`
+  const number = String(sequence).padStart(2, '0')
+  return `${uploadNamePart(account, 'student')}_${uploadNamePart(threshold, '證明')}_${timestamp}_${number}.${extension}`
+}
+
+export function cleanUploadName(name: string) {
+  const clean = name.replace(/[\/\\\p{Cc}\uD800-\uDFFF]/gu, '_').trim() || 'upload'
+  const chars = Array.from(clean)
+  if (chars.length <= maxFileNameLength) return clean
+  const extension = path.extname(clean)
+  if (!/^\.[a-z0-9]{1,10}$/i.test(extension)) return chars.slice(0, maxFileNameLength).join('')
+  return chars.slice(0, maxFileNameLength - extension.length).join('') + extension
+}
+
+export function displayUploadName(name: string) {
+  // Older multipart uploads treated UTF-8 header bytes as Latin-1.
+  if (/^[\u0000-\u00ff]+$/u.test(name)) {
+    const bytes = Buffer.from(name, 'latin1')
+    if (isUtf8(bytes)) {
+      const decoded = bytes.toString('utf8')
+      if (/[\u0080-\u009f]/u.test(name) || /[\p{Script=Han}\u{10000}-\u{10ffff}]/u.test(decoded)) {
+        return cleanUploadName(decoded)
+      }
+    }
+  }
+  return cleanUploadName(name)
+}
+
+export function uploadDisposition(name: string, inline: boolean) {
+  const decoded = displayUploadName(name)
+  const fallback = decoded.replace(/[^\x20-\x7e]|["\\%]/g, '_')
+  const utf8 = encodeURIComponent(decoded).replace(/['()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
+  return `${inline ? 'inline' : 'attachment'}; filename="${fallback}"; filename*=UTF-8''${utf8}`
 }

@@ -182,7 +182,7 @@ export async function progressFor(userId: string): Promise<Progress> {
       .filter((threshold) => threshold.state === 'unpublished')
       .map((threshold) => ({ code: threshold.code, nameZh: threshold.nameZh, nameEn: threshold.nameEn })),
   ]
-  const pending = thresholds.some((threshold) => threshold.state === 'under_review')
+  const pending = thresholds.some((threshold) => threshold.kind === 'NON_CREDIT' && threshold.state === 'under_review')
   let verdict: Progress['verdict'] = 'ready'
   if (missing.length) verdict = 'blocked'
   else if (pending) verdict = 'pending_review'

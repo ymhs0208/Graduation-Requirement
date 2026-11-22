@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../db'
 import { audit } from '../audit'
 import { HttpError } from '../errors'
-import { saveUpload } from '../files'
+import { displayUploadName, evidenceUploadName, saveUpload } from '../files'
 import { asyncHandler, requireRole, requireUser, type AuthedRequest } from '../http'
 import { notify } from '../mail'
 import { progressFor } from '../progress'
@@ -12,7 +12,7 @@ import { progressFor } from '../progress'
 const router = Router()
 router.use(requireUser, requireRole('STUDENT'))
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 3 } })
+const upload = multer({ storage: multer.memoryStorage(), defParamCharset: 'utf8', limits: { fileSize: 8 * 1024 * 1024, files: 3 } })
 
 router.get(
   '/dashboard',
@@ -73,7 +73,7 @@ router.post(
     const user = await prisma.user.findUnique({ where: { id: req.userId } })
     if (!user?.cohortYear) throw new HttpError(400, 'VALIDATION')
     const threshold = await prisma.threshold.findFirst({
-      where: { id: body.thresholdId, ruleSet: { cohortYear: user.cohortYear }, kind: { not: 'INFO' } },
+      where: { id: body.thresholdId, ruleSet: { cohortYear: user.cohortYear }, kind: { not: 'INFO' }, isPlaceholder: false },
     })
     if (!threshold) throw new HttpError(404, 'NOT_FOUND')
     const expectedType =
@@ -93,11 +93,13 @@ router.post(
     }
     const files = (req.files as Express.Multer.File[] | undefined) ?? []
     if (!files.length) throw new HttpError(400, 'FILE_TYPE')
+    const uploadedAt = new Date()
     const stored = []
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       const saved = await saveUpload(file.buffer)
       if (!saved) throw new HttpError(400, 'FILE_TYPE')
-      stored.push({ ...saved, originalName: file.originalname.slice(0, 180) })
+      const originalName = evidenceUploadName(user.account, threshold.nameZh, uploadedAt, index + 1, saved.ext)
+      stored.push({ storageKey: saved.storageKey, originalName, mimeType: saved.mime, size: saved.size })
     }
     const submission = await prisma.submission.create({
       data: {
@@ -106,7 +108,7 @@ router.post(
         recognizedItemId: recognized?.id,
         scoreText: body.scoreText || null,
         note: body.note || null,
-        files: { create: stored.map((file) => ({ storageKey: file.storageKey, originalName: file.originalName, mimeType: file.mime, size: file.size })) },
+        files: { create: stored },
       },
       include: { files: true },
     })
@@ -181,7 +183,7 @@ export function presentSubmission(submission: {
     reviewedAt: submission.reviewedAt,
     threshold: submission.threshold,
     recognizedItem: submission.recognizedItem,
-    files: submission.files,
+    files: submission.files.map((file) => ({ ...file, originalName: displayUploadName(file.originalName) })),
     student: submission.student,
   }
 }

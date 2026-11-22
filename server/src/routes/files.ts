@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { prisma } from '../db'
-import { resolveStored, safeDownloadName } from '../files'
+import { resolveStored, uploadDisposition } from '../files'
 import { asyncHandler, pid, requireUser, type AuthedRequest } from '../http'
 import fs from 'fs'
 
@@ -28,10 +28,7 @@ router.get(
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox")
     res.setHeader('Cache-Control', 'private, no-store')
-    res.setHeader(
-      'Content-Disposition',
-      `${inline ? 'inline' : 'attachment'}; filename="${safeDownloadName(file.originalName)}"; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
-    )
+    res.setHeader('Content-Disposition', uploadDisposition(file.originalName, inline))
     fs.createReadStream(full).pipe(res)
   }),
 )

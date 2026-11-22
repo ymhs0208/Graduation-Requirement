@@ -10,8 +10,11 @@ async function login(page, account, password, code) {
   await page.goto(base)
   await page.getByLabel('學號或教職員編號').fill(account)
   await page.getByLabel('密碼', { exact: true }).fill(password)
-  if (code) await page.getByLabel('驗證碼').fill(code)
-  await page.getByRole('button', { name: '登入' }).click()
+  await page.getByRole('button', { name: '登入', exact: true }).click()
+  if (code) {
+    await page.getByLabel('驗證碼', { exact: true }).fill(code)
+    await page.getByRole('button', { name: '驗證並登入', exact: true }).click()
+  }
   await page.waitForTimeout(800)
 }
 

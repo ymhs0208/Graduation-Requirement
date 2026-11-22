@@ -150,6 +150,12 @@ model PlanItem {
   moduleEn         String
   requirementType  String
   creditsConfirmed Boolean @default(false)
+  term             String  @default("YEAR_ONLY")
+  credits          Float?
+  classHours       Int?
+  practiceHours    Int?
+  noteZh           String  @default("")
+  noteEn           String  @default("")
   sourceNoteZh     String
   sourceNoteEn     String
   sort             Int

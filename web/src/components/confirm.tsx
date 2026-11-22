@@ -60,7 +60,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             aria-describedby="confirm-body"
           >
             <h2 id="confirm-title" className="text-lg font-bold">{ask.title}</h2>
-            <p id="confirm-body" className="text-sm leading-6">{ask.body}</p>
+            <p id="confirm-body" className="max-h-[55svh] overflow-auto whitespace-pre-line text-sm leading-6">{ask.body}</p>
             <div className="flex justify-end gap-2">
               <button className="btn btn-ghost" type="button" onClick={() => close(false)}>
                 {t('cancel')}

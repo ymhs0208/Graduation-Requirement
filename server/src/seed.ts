@@ -4,6 +4,7 @@ import { prisma } from './db'
 import { hashPassword } from './crypto'
 import { saveUpload } from './files'
 import { DEMO_ADMIN_TOTP, DEMO_PASSWORD } from './demo'
+import { initialCurriculum115 } from './curriculum-115'
 import { env } from './env'
 
 const SRC = {
@@ -362,6 +363,10 @@ export async function seed() {
     }
     for (const threshold of thresholds) {
       await prisma.threshold.create({ data: { ruleSetId: rule.id, ...threshold } })
+    }
+    if (year === 115) {
+      await prisma.planItem.createMany({ data: initialCurriculum115.map((item) => ({ ...item, ruleSetId: rule.id })) })
+      continue
     }
     let sort = 0
     for (const row of PLAN) {

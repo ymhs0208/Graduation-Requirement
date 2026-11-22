@@ -1,12 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useLock, useUnsaved } from '../components/confirm'
-import { PageSkeleton, PendingLabel, TableSkeleton } from '../components/feedback'
-import { DocumentPreview } from '../components/preview'
+import { Link } from 'react-router-dom'
+import { ArrowRight, BookOpen, CircleCheck, Search, UsersRound } from 'lucide-react'
+import { TableSkeleton } from '../components/feedback'
 import { EmptyState, StatusPill } from '../components/shell'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { showGraduationVerdict } from '../lib/progress'
 
 type Row = {
   id: string
@@ -14,142 +14,158 @@ type Row = {
   nameZh: string
   nameEn: string
   classNameZh: string
+  classNameEn?: string
+  cohortYear?: number | null
   verdict: string
-  atRisk: boolean
-  delayed: boolean
   earnedTowardTotal: number
   requiredTotal: number | null
   missing: { nameZh: string; nameEn: string }[]
 }
 
+const rosterPageSize = 12
+const rosterClassKey = (year: number | null | undefined, name: string) => JSON.stringify([year ?? null, name])
+
 export function TeacherHome() {
   const { t, locale } = useI18n()
-  const [atRisk, setAtRisk] = useState(false)
+  const [search, setSearch] = useState('')
+  const [classFilter, setClassFilter] = useState('')
+  const [page, setPage] = useState(1)
   const query = useQuery({
-    queryKey: ['roster', atRisk],
-    queryFn: () => api<{ students: Row[] }>(`/api/teacher/students${atRisk ? '?atRisk=1' : ''}`),
+    queryKey: ['roster'],
+    queryFn: async () => {
+      const [{ students }, { classes }] = await Promise.all([
+        api<{ students: Row[] }>('/api/teacher/students'),
+        api<{ classes: { id: string; cohortYear: number; nameZh: string; nameEn: string }[] }>('/api/teacher/classes'),
+      ])
+      return { students, classes }
+    },
   })
-  if (query.isLoading || !query.data) return query.isLoading ? <TableSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
-  return (
-    <div className="space-y-4">
-      <label className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium shadow-sm ring-1 ring-line">
-        <input className="h-4 w-4 accent-teal" type="checkbox" checked={atRisk} onChange={(event) => setAtRisk(event.target.checked)} />
-        {t('atRisk')}
-      </label>
-      <div className="card overflow-auto">
-        <table className="data-table">
-          <caption className="sr-only">{t('classes')}</caption>
-          <thead>
-            <tr>
-              <th scope="col">{t('account')}</th>
-              <th scope="col">{locale === 'en' ? 'Name' : '姓名'}</th>
-              <th scope="col">{t('overview')}</th>
-              <th scope="col">{t('earned')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {query.data.students.map((student) => (
-              <tr key={student.id}>
-                <td>
-                  <Link className="font-semibold text-teal underline-offset-2 hover:underline" to={`/teacher/${student.id}`}>
-                    {student.account}
-                  </Link>
-                </td>
-                <td>{locale === 'en' ? student.nameEn : student.nameZh}</td>
-                <td>
-                  <StatusPill state={student.verdict} /> {student.atRisk && <span className="ml-1 inline-flex rounded-full bg-[#fdecee] px-2 py-1 text-xs font-semibold text-[#9e1d22]">{t('atRisk')}</span>}
-                </td>
-                <td className="tabular-nums">
-                  {student.earnedTowardTotal}
-                  {student.requiredTotal != null ? ` / ${student.requiredTotal}` : ''}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {query.data.students.length === 0 && <EmptyState>{t('empty')}</EmptyState>}
-    </div>
+  if (query.isLoading) return <TableSkeleton />
+  if (!query.data) return (
+    <section className="card p-5">
+      <p className="text-sm text-muted" role="alert">{t('loadFailed')}</p>
+      <button type="button" className="btn btn-ghost mt-3" onClick={() => void query.refetch()}>{t('tryAgain')}</button>
+    </section>
   )
-}
 
-export function TeacherStudent() {
-  const { id = '' } = useParams()
-  const { t, locale } = useI18n()
-  const client = useQueryClient()
-  const [preview, setPreview] = useState('')
-  const [body, setBody] = useState('')
-  const { busy, run } = useLock()
-  useUnsaved(Boolean(body.trim()))
-  const query = useQuery({
-    queryKey: ['teacher-student', id],
-    queryFn: () =>
-      api<{
-        student: { account: string; nameZh: string; nameEn: string; status: string }
-        progress: { verdict: string; categories: { code: string; nameZh: string; nameEn: string; earned: number; requiredCredits: number | null }[]; thresholds: { nameZh: string; nameEn: string; state: string }[] }
-        submissions: { id: string; status: string; scoreText: string | null; createdAt: string; threshold?: { nameZh: string; nameEn: string }; files: { id: string; originalName: string }[] }[]
-        comments: { id: string; body: string; createdAt: string }[]
-      }>(`/api/teacher/students/${id}`),
-  })
-  if (query.isLoading || !query.data) return query.isLoading ? <PageSkeleton /> : <p className="text-sm text-muted">{t('error')}</p>
-  const student = query.data.student
+  const { students, classes } = query.data
+  const counts = new Map<string, number>()
+  for (const student of students) {
+    const key = rosterClassKey(student.cohortYear, student.classNameZh)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const selectedClass = classes.find((item) => rosterClassKey(item.cohortYear, item.nameZh) === classFilter)
+  const classTitle = (item: { nameZh: string; nameEn: string }) => locale === 'en' ? item.nameEn || item.nameZh : item.nameZh
+  const scope = selectedClass ? students.filter((student) => rosterClassKey(student.cohortYear, student.classNameZh) === classFilter) : students
+  const scopeTitle = selectedClass ? classTitle(selectedClass) : t('rosterAllClasses')
+  const term = search.trim().toLowerCase()
+  const filtered = scope.filter((student) =>
+    [student.account, student.nameZh, student.nameEn].some((value) => value.toLowerCase().includes(term)),
+  )
+  const pageCount = Math.max(1, Math.ceil(filtered.length / rosterPageSize))
+  const currentPage = Math.min(page, pageCount)
+  const start = (currentPage - 1) * rosterPageSize
+  const visible = filtered.slice(start, start + rosterPageSize)
+  const hasFilters = Boolean(search)
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div className="space-y-4">
-        <div className="card p-5">
-          <p className="text-sm text-muted">{student.account}</p>
-          <h1 className="text-2xl font-bold tracking-tight">{locale === 'en' ? student.nameEn : student.nameZh}</h1>
-          <div className="mt-3">
-            <StatusPill state={query.data.progress.verdict} />
-          </div>
-          <p className="mt-4 rounded-xl bg-[#fff6e0] px-3 py-2 text-sm leading-6 text-[#8a5600]">{t('reminderHint')}</p>
+    <div className="roster-workspace">
+      <aside className="card roster-class-panel" aria-label={t('rosterClass')}>
+        <div className="roster-class-heading">
+          <BookOpen size={19} aria-hidden />
+          <h2 className="section-title">{t('rosterClass')}</h2>
         </div>
-        {query.data.submissions.map((submission) => (
-          <article key={submission.id} className="card p-4">
-            <div className="flex flex-wrap justify-between gap-2">
-              <h2 className="font-semibold">{locale === 'en' ? submission.threshold?.nameEn : submission.threshold?.nameZh}</h2>
-              <StatusPill state={submission.status === 'APPROVED' ? 'passed' : submission.status === 'PENDING' ? 'under_review' : 'missing'} />
-            </div>
-            <p className="text-sm text-muted">
-              {t('score')}: {submission.scoreText || '—'} · {new Date(submission.createdAt).toLocaleDateString()}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {submission.files.map((file) => (
-                <button key={file.id} className="btn btn-ghost px-2.5 py-1" type="button" onClick={() => setPreview(file.id)}>
-                  {file.originalName}
-                </button>
-              ))}
-            </div>
-          </article>
-        ))}
-        <form
-          className="card space-y-3 p-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (!body.trim()) return
-            void run(async () => {
-              await api(`/api/teacher/students/${id}/comments`, { method: 'POST', body: { body }, success: t('saved') })
-              setBody('')
-              await client.invalidateQueries({ queryKey: ['teacher-student', id] })
-            })
-          }}
-        >
-          <label className="block text-sm font-medium">
-            {t('reminder')}
-            <textarea className="field w-full" value={body} onChange={(event) => setBody(event.target.value)} />
-          </label>
-          <button className="btn btn-ink" type="submit" disabled={busy || !body.trim()} title={!body.trim() ? t('reminderHint') : undefined}>
-            <PendingLabel pending={busy}>{t('reminder')}</PendingLabel>
+        <div className="roster-class-picker" role="group" aria-label={t('rosterClass')}>
+          <button type="button" aria-pressed={!selectedClass} onClick={() => { setClassFilter(''); setPage(1) }}>
+            <span className="font-semibold">{t('rosterAllClasses')}</span><span className="roster-class-count">{students.length}</span>
           </button>
-          {!body.trim() && <p className="text-xs text-muted">{t('reminderHint')}</p>}
-        </form>
-        {query.data.comments.map((comment) => (
-          <p key={comment.id} className="rounded-2xl bg-[#eef1f6] px-4 py-3 text-sm leading-6">
-            {comment.body}
-          </p>
-        ))}
+          {classes.map((item) => {
+            const key = rosterClassKey(item.cohortYear, item.nameZh)
+            return (
+              <button type="button" key={item.id} aria-pressed={selectedClass?.id === item.id} onClick={() => { setClassFilter(key); setPage(1) }}>
+                <span className="min-w-0">
+                  <span className="block font-semibold">{classTitle(item)}</span>
+                  <span className="roster-class-year">{item.cohortYear}</span>
+                </span>
+                <span className="roster-class-count">{counts.get(key) ?? 0}</span>
+              </button>
+            )
+          })}
+        </div>
+      </aside>
+      <div className="min-w-0 space-y-4">
+      <section className="roster-overview">
+        <h2 className="text-xl font-bold">{scopeTitle}</h2>
+        <dl className="roster-metrics">
+          {([
+            ['rosterStudents', scope.length, UsersRound],
+            ['rosterEligible', scope.filter((student) => student.verdict === 'ready').length, CircleCheck],
+          ] as const).map(([label, count, Icon]) => (
+            <div key={label} className="roster-metric">
+              <dt><Icon size={16} aria-hidden />{t(label)}</dt>
+              <dd>{count}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+      <section className="card roster-results">
+        <header className="panel-heading">
+          <div className="roster-filters">
+            <label className="text-sm font-semibold">{t('rosterSearch')}
+              <span className="account-search">
+                <Search size={17} aria-hidden />
+                <input className="field w-full" type="search" placeholder={t('rosterSearchHint')} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} />
+              </span>
+            </label>
+          </div>
+        </header>
+        <div className="directory-results">
+          <p className="text-sm text-muted" role="status">{t('rosterResults')} {filtered.length} / {scope.length}</p>
+          {hasFilters && <button type="button" className="btn btn-ghost" onClick={() => {
+            setSearch(''); setPage(1)
+          }}>{t('directoryClear')}</button>}
+        </div>
+        {visible.length === 0 ? <EmptyState>{t(hasFilters ? 'rosterNoMatch' : 'rosterEmpty')}</EmptyState> : (
+          <ul className="roster-list">
+            {visible.map((student) => {
+              const name = (locale === 'en' ? student.nameEn : student.nameZh) || student.account
+              const group = locale === 'en' ? student.classNameEn || student.classNameZh : student.classNameZh
+              const target = student.requiredTotal
+              const width = target && target > 0 ? Math.max(0, Math.min(100, student.earnedTowardTotal / target * 100)) : null
+              return (
+                <li key={student.id} className="roster-row">
+                  <div className="roster-person">
+                    <span className="workspace-avatar" aria-hidden="true">{Array.from(name)[0]}</span>
+                    <div className="min-w-0">
+                      <h3 className="font-bold">{name}</h3>
+                      <p className="text-sm text-muted">{[student.account, group].filter(Boolean).join(' · ')}</p>
+                    </div>
+                  </div>
+                  {showGraduationVerdict(student.verdict) && <StatusPill state={student.verdict} plain />}
+                  <div className="roster-credits">
+                    <p className="text-xs text-muted">{t('creditProgress')}</p>
+                    <p className="font-bold tabular-nums">{student.earnedTowardTotal}{width !== null && <span className="text-sm font-medium text-muted"> / {target}</span>} <span className="text-xs font-medium text-muted">{t('creditUnit')}</span></p>
+                    {width !== null && <div className="credit-track mt-1.5" aria-hidden="true"><div className="h-full rounded-full bg-teal" style={{ width: `${width}%` }} /></div>}
+                  </div>
+                  {student.missing.length > 0 && (
+                    <p className="roster-missing text-xs text-muted"><strong className="text-ink">{t('needsAttention')}</strong> · {student.missing.map((item) => locale === 'en' ? item.nameEn : item.nameZh).join(locale === 'en' ? ', ' : '、')}</p>
+                  )}
+                  <Link className="roster-open" to={`/teacher/${student.id}`} aria-label={`${t('rosterViewProgress')} · ${name} · ${student.account}`}>
+                    {t('rosterViewProgress')}<ArrowRight size={15} aria-hidden />
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        {pageCount > 1 && <footer className="directory-results border-t border-line">
+          <p className="text-sm text-muted">{start + 1}–{start + visible.length} / {filtered.length}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-ghost" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>{t('directoryPrevious')}</button>
+            <button type="button" className="btn btn-ghost" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>{t('directoryNext')}</button>
+          </div>
+        </footer>}
+      </section>
       </div>
-      <div>{preview ? <DocumentPreview fileId={preview} /> : <EmptyState>{t('preview')}</EmptyState>}</div>
     </div>
   )
 }

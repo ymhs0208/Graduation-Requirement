@@ -10,25 +10,29 @@ export async function runPreaudit(cohortYear: number, actorId: string | null) {
     where: { role: 'STUDENT', status: 'ACTIVE', cohortYear, anonymizedAt: null },
     include: { class: true },
   })
-  const teacherBuckets = new Map<string, string[]>()
+  const teacherBuckets = new Map<string, { zh: string; en: string }[]>()
   let missingCount = 0
   for (const student of students) {
     const progress = await progressFor(student.id)
     if (progress.verdict !== 'ready') missingCount += 1
-    const missingZh = [...progress.missing.map((item) => item.nameZh), ...progress.office.map((item) => `${item.nameZh}（待系上確認）`)].join('、') || '無'
-    const missingEn = [...progress.missing.map((item) => item.nameEn), ...progress.office.map((item) => `${item.nameEn} (awaiting the office)`)].join(', ') || 'none'
+    const missingZh = progress.missing.map((item) => item.nameZh).join('、')
+    const missingEn = progress.missing.map((item) => item.nameEn).join(', ')
+    const contactOffice = progress.office.length > 0 || !progress.totalConfirmed
+    const result = auditResultLabel(progress.verdict)
+    const bodyZh = `預審結果：${result.zh}。${missingZh ? `未完成項目：${missingZh}。` : ''}${contactOffice && progress.verdict !== 'needs_office' && progress.verdict !== 'no_rules' ? '完整畢業資格請洽系辦。' : ''}`
+    const bodyEn = `Result: ${result.en}.${missingEn ? ` Incomplete requirements: ${missingEn}.` : ''}${contactOffice && progress.verdict !== 'needs_office' && progress.verdict !== 'no_rules' ? ' Contact the department office for a full eligibility review.' : ''}`
     await notify({
       userId: student.id,
       kind: 'preaudit',
       titleZh: `${cohortYear} 學年度大四上畢業預審`,
       titleEn: `Senior-year pre-audit for cohort ${cohortYear}`,
-      bodyZh: `預審結果：${labelZh(progress.verdict)}。未完成：${missingZh}`,
-      bodyEn: `Result: ${progress.verdict}. Still open: ${missingEn}`,
+      bodyZh,
+      bodyEn,
     })
     const advisorId = student.class?.advisorId
     if (advisorId) {
       const bucket = teacherBuckets.get(advisorId) ?? []
-      bucket.push(`${student.account} ${student.nameZh}：${missingZh}`)
+      bucket.push({ zh: `${student.account} ${student.nameZh}：${bodyZh}`, en: `${student.account} ${student.nameEn}: ${bodyEn}` })
       teacherBuckets.set(advisorId, bucket)
     }
   }
@@ -38,8 +42,8 @@ export async function runPreaudit(cohortYear: number, actorId: string | null) {
       kind: 'preaudit.advisor',
       titleZh: `${cohortYear} 學年度班級畢業預審`,
       titleEn: `Cohort ${cohortYear} pre-audit`,
-      bodyZh: lines.join('\n'),
-      bodyEn: lines.join('\n'),
+      bodyZh: lines.map((line) => line.zh).join('\n'),
+      bodyEn: lines.map((line) => line.en).join('\n'),
     })
   }
   const run = await prisma.preAuditRun.create({
@@ -177,10 +181,9 @@ export function seniorCohort(academicYear: number) {
 
 export { studyYearOf }
 
-function labelZh(verdict: string) {
-  if (verdict === 'ready') return '可畢業'
-  if (verdict === 'blocked') return '仍有缺項'
-  if (verdict === 'pending_review') return '審核中'
-  if (verdict === 'needs_office') return '待系上確認規則'
-  return '尚無規則'
+function auditResultLabel(verdict: string) {
+  if (verdict === 'ready') return { zh: '可畢業', en: 'Eligible to graduate' }
+  if (verdict === 'blocked') return { zh: '仍有缺項', en: 'Requirements incomplete' }
+  if (verdict === 'pending_review') return { zh: '審核中', en: 'Evidence under review' }
+  return { zh: '畢業資格請洽系辦', en: 'Contact the department office about graduation eligibility' }
 }

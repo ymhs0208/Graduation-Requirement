@@ -1,4 +1,6 @@
 import { Router } from 'express'
+import planRoutes from './admin-plan'
+import { randomUUID } from 'node:crypto'
 import multer from 'multer'
 import { stringify } from 'csv-stringify/sync'
 import { z } from 'zod'
@@ -17,6 +19,7 @@ const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 
 
 const router = Router()
 router.use(requireUser, requireRole('ADMIN'))
+router.use('/plans', planRoutes)
 
 const accountSchema = z.string().trim().min(1).max(20)
 
@@ -423,6 +426,62 @@ router.patch(
   }),
 )
 
+const conditionSchema = z.object({
+  nameZh: z.string().trim().min(1).max(80),
+  nameEn: z.string().trim().max(120),
+  descriptionZh: z.string().trim().min(1).max(1500),
+  descriptionEn: z.string().trim().max(1500),
+  kind: z.enum(['NON_CREDIT', 'OPTIONAL', 'INFO']),
+}).transform((body) => ({ ...body, nameEn: body.nameEn || body.nameZh, descriptionEn: body.descriptionEn || body.descriptionZh }))
+
+router.post(
+  '/rules/:cohort/conditions',
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const body = conditionSchema.parse(req.body)
+    const cohortYear = Number(req.params.cohort)
+    if (!Number.isInteger(cohortYear)) throw new HttpError(400, 'VALIDATION')
+    const rule = await prisma.ruleSet.findUnique({ where: { cohortYear } })
+    if (!rule) throw new HttpError(404, 'NOT_FOUND')
+    const condition = await prisma.$transaction(async (tx) => {
+      const { _max } = await tx.threshold.aggregate({ where: { ruleSetId: rule.id }, _max: { sort: true } })
+      const created = await tx.threshold.create({
+        data: { ...body, code: `CUSTOM_${randomUUID()}`, ruleSetId: rule.id, sort: (_max.sort ?? 0) + 1 },
+      })
+      await audit({
+        actorId: req.userId, action: 'rules.condition.create', entityType: 'threshold', entityId: created.id,
+        summaryZh: `新增 ${cohortYear} 入學年度畢業條件：${created.nameZh}`,
+        summaryEn: `Added graduation condition for cohort ${cohortYear}: ${created.nameEn}`,
+        after: body,
+      }, tx)
+      return created
+    })
+    res.status(201).json({ condition })
+  }),
+)
+
+router.patch(
+  '/rules/:cohort/conditions/:id',
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const body = conditionSchema.parse(req.body)
+    const cohortYear = Number(req.params.cohort)
+    if (!Number.isInteger(cohortYear)) throw new HttpError(400, 'VALIDATION')
+    const condition = await prisma.$transaction(async (tx) => {
+      const before = await tx.threshold.findFirst({ where: { id: pid(req.params.id), ruleSet: { cohortYear } } })
+      if (!before) throw new HttpError(404, 'NOT_FOUND')
+      const updated = await tx.threshold.update({ where: { id: before.id }, data: { ...body, isPlaceholder: false } })
+      await audit({
+        actorId: req.userId, action: 'rules.condition.update', entityType: 'threshold', entityId: updated.id,
+        summaryZh: `更新 ${cohortYear} 入學年度畢業條件：${updated.nameZh}`,
+        summaryEn: `Updated graduation condition for cohort ${cohortYear}: ${updated.nameEn}`,
+        before,
+        after: { ...body, isPlaceholder: false },
+      }, tx)
+      return updated
+    })
+    res.json({ condition })
+  }),
+)
+
 router.get(
   '/recognized',
   asyncHandler(async (_req, res) => {
@@ -664,6 +723,76 @@ router.post(
     const result = await anonymizeUser(pid(req.params.id), req.userId ?? null)
     if (!result) throw new HttpError(404, 'NOT_FOUND')
     res.json(result)
+  }),
+)
+
+const announcementDraft = z.object({
+  audience: z.enum(['ALL', 'STUDENT', 'TEACHER']),
+  titleZh: z.string().trim().min(1).max(120),
+  bodyZh: z.string().trim().min(1).max(4000),
+  titleEn: z.string().trim().max(120).optional(),
+  bodyEn: z.string().trim().max(4000).optional(),
+})
+const announcementRecord = announcementDraft.extend({ recipientCount: z.number().int().positive() })
+const announcementAction = 'announcement.publish'
+
+router.get(
+  '/announcements',
+  asyncHandler(async (_req, res) => {
+    const entries = await prisma.auditLog.findMany({
+      where: { action: announcementAction },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 50,
+      select: { id: true, createdAt: true, after: true },
+    })
+    res.json({ announcements: entries.flatMap((entry) => {
+      const record = announcementRecord.safeParse(entry.after)
+      return record.success ? [{ id: entry.id, createdAt: entry.createdAt, ...record.data }] : []
+    }) })
+  }),
+)
+
+router.post(
+  '/announcements',
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const { requestId, audience, titleZh, bodyZh, titleEn, bodyEn } = announcementDraft.extend({ requestId: z.string().uuid() }).parse(req.body)
+    const content = { titleZh, bodyZh, titleEn: titleEn || titleZh, bodyEn: bodyEn || bodyZh }
+    const result = await prisma.$transaction(async (tx) => {
+      const previous = await tx.auditLog.findUnique({ where: { id: requestId } })
+      if (previous) {
+        const record = announcementRecord.safeParse(previous.after)
+        if (previous.actorId !== req.userId || previous.action !== announcementAction || !record.success ||
+          record.data.audience !== audience || record.data.titleZh !== content.titleZh || record.data.titleEn !== content.titleEn ||
+          record.data.bodyZh !== content.bodyZh || record.data.bodyEn !== content.bodyEn) {
+          throw new HttpError(409, 'VALIDATION')
+        }
+        return { id: previous.id, createdAt: previous.createdAt, ...record.data }
+      }
+      const recipients = await tx.user.findMany({
+        where: { status: 'ACTIVE', anonymizedAt: null, role: audience === 'ALL' ? { in: ['STUDENT', 'TEACHER'] } : audience },
+        select: { id: true },
+      })
+      if (!recipients.length) throw new HttpError(400, 'NO_ANNOUNCEMENT_RECIPIENTS', {
+        zh: '這個對象目前沒有可接收公告的帳號。', en: 'There are no active recipients in this audience.',
+      })
+      const record = { audience, recipientCount: recipients.length, ...content }
+      const entry = await tx.auditLog.create({
+        data: {
+          id: requestId, actorId: req.userId, action: announcementAction, entityType: 'announcement', entityId: requestId,
+          summaryZh: `發布公告：${titleZh}`, summaryEn: `Published announcement: ${content.titleEn}`, after: record,
+        },
+      })
+      // The history entry and every inbox copy are committed together.
+      for (let offset = 0; offset < recipients.length; offset += 1000) {
+        await tx.notification.createMany({
+          data: recipients.slice(offset, offset + 1000).map(({ id }) => ({
+            userId: id, kind: 'announcement', ...content, createdAt: entry.createdAt,
+          })),
+        })
+      }
+      return { id: entry.id, createdAt: entry.createdAt, ...record }
+    }, { timeout: 30_000 })
+    res.status(201).json({ announcement: result })
   }),
 )
 

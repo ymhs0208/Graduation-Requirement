@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 
 let csrf = ''
 const connectionListeners = new Set<() => void>()
+const sessionListeners = new Set<() => void>()
 
 export function setCsrf(token: string) {
   csrf = token
@@ -10,6 +11,22 @@ export function setCsrf(token: string) {
 export function onConnectionProblem(listener: () => void) {
   connectionListeners.add(listener)
   return () => connectionListeners.delete(listener)
+}
+
+export function onSessionLost(listener: () => void) {
+  sessionListeners.add(listener)
+  return () => { sessionListeners.delete(listener) }
+}
+
+function reportSessionLost() {
+  setCsrf('')
+  sessionListeners.forEach((listener) => listener())
+}
+
+export async function fetchAuthenticatedFile(path: string) {
+  const response = await fetch(path, { credentials: 'include' })
+  if (response.status === 401) reportSessionLost()
+  return response
 }
 
 function reportConnection() {
@@ -30,6 +47,7 @@ export class ApiError extends Error {
 
 export function errorMessage(error: unknown, locale: 'zh-Hant' | 'en', fallback: string) {
   if (error instanceof ApiError) {
+    if (error.code === 'UNAUTHENTICATED') return locale === 'en' ? 'Please sign in again.' : '請重新登入。'
     if (error.code === 'OFFLINE' || error.code === 'TIMEOUT') return locale === 'en' ? 'Connection lost. Try again.' : '連線中斷，請重試'
     const text = locale === 'en' ? error.messageEn : error.messageZh
     if (text) return text
@@ -55,7 +73,7 @@ type Options = {
 }
 
 function fail(error: ApiError, silent?: boolean): never {
-  if (!silent && error.code !== 'CANCELLED') {
+  if (!silent && error.code !== 'CANCELLED' && error.code !== 'UNAUTHENTICATED') {
     if (error.code === 'OFFLINE' || error.code === 'TIMEOUT') reportConnection()
     else toast.error(toastText(error))
   }
@@ -75,7 +93,13 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
     if (options.success) toast.success(options.success)
     return data
   } catch (error) {
-    if (error instanceof ApiError) return fail(error, options.silent)
+    if (error instanceof ApiError) {
+      if (error.code === 'UNAUTHENTICATED') {
+        if (path === '/api/auth/me') setCsrf('')
+        else reportSessionLost()
+      }
+      return fail(error, options.silent)
+    }
     reportConnection()
     return fail(new ApiError('OFFLINE', '連線中斷，請重試', 'Connection lost. Try again.'), options.silent)
   }
