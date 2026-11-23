@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, BookOpen, FileText, MessageSquare, Send } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ActionDialog } from '../components/action-dialog'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
 import { PageSkeleton, PendingButton } from '../components/feedback'
 import { DocumentPreview } from '../components/preview'
@@ -39,9 +40,11 @@ function StudentDetail({ id }: { id: string }) {
   const [tab, setTab] = useState<(typeof sections)[number][0]>('progress')
   const [file, setFile] = useState<EvidenceFile | null>(null)
   const [body, setBody] = useState('')
+  const [reminderOpen, setReminderOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [sent, setSent] = useState(false)
   const previewTitle = useRef<HTMLHeadingElement>(null)
+  const reminderButton = useRef<HTMLButtonElement>(null)
   const query = useQuery({
     queryKey: ['teacher-student', id],
     queryFn: () => api<Detail>(`/api/teacher/students/${id}`),
@@ -70,6 +73,15 @@ function StudentDetail({ id }: { id: string }) {
   const missing = progress.missing ?? []
   const date = (value: string) => new Date(value).toLocaleDateString(locale)
 
+  function dismissReminder() {
+    void run(async () => {
+      if (body.trim() && !await confirm({ title: t('ruleDiscard'), body: t('ruleDiscardConfirm'), confirm: t('ruleDiscard') })) return
+      setBody('')
+      setMessage('')
+      setReminderOpen(false)
+    })
+  }
+
   return (
     <div className="space-y-4">
       {back}
@@ -78,7 +90,7 @@ function StudentDetail({ id }: { id: string }) {
           <div className="student-profile-main">
             <span className="advisor-profile-avatar" aria-hidden="true">{Array.from(name)[0]}</span>
             <div className="min-w-0">
-              <h2 className="text-3xl font-bold tracking-tight">{name}</h2>
+              <h2 className="profile-title">{name}</h2>
               <p className="mt-1 text-sm text-slate-200">{[student.account, student.cohortYear ? `${student.cohortYear} ${t('cohort')}` : ''].filter(Boolean).join(' · ')}</p>
             </div>
           </div>
@@ -117,7 +129,7 @@ function StudentDetail({ id }: { id: string }) {
               {categories.map((item) => (
                 <div key={item.code} className="advisor-item">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-semibold">{nameOf(item)}</h3>
+                    <h3 className="item-title">{nameOf(item)}</h3>
                     <StatusPill state={item.met ? 'passed' : 'missing'} />
                   </div>
                   <p className="mt-1 text-sm text-muted">{t('earned')} <strong className="text-ink">{item.earned}</strong> · {t('required')} <strong className="text-ink">{item.requiredCredits}</strong> {t('creditUnit')}</p>
@@ -149,7 +161,7 @@ function StudentDetail({ id }: { id: string }) {
             {submissions.map((submission) => (
               <article key={submission.id} className="advisor-item">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-bold">{nameOf(submission.threshold) || t('evidence')}</h3>
+                  <h3 className="item-title">{nameOf(submission.threshold) || t('evidence')}</h3>
                   <StatusPill state={submission.status === 'APPROVED' ? 'passed' : submission.status === 'PENDING' ? 'under_review' : 'missing'} />
                 </div>
                 <p className="mt-1 text-sm text-muted">
@@ -175,47 +187,56 @@ function StudentDetail({ id }: { id: string }) {
         </div>
       )}
       {tab === 'reminders' && (
-        <div className="workspace-columns">
-          <form className="card space-y-3 p-4 sm:p-5" onSubmit={(event) => {
-            event.preventDefault()
-            const text = body.trim()
-            if (!text || text.length > 1000) return
-            void run(async () => {
-              setMessage('')
+        <section className="card">
+          <header className="panel-heading flex flex-wrap items-center justify-between gap-2">
+            <h2 className="section-title">{t('advisorReminderHistory')}</h2>
+            <button ref={reminderButton} type="button" className="btn btn-primary" aria-haspopup="dialog" onClick={() => {
               setSent(false)
-              if (!await confirm({ title: t('sendReminder'), body: `${name} · ${student.account}\n\n${text}`, confirm: t('sendReminder') })) return
-              try {
-                await api(`/api/teacher/students/${id}/comments`, { method: 'POST', body: { body: text }, silent: true })
-                setBody('')
-                setSent(true)
-                await client.invalidateQueries({ queryKey: ['teacher-student', id] })
-              } catch (error) {
-                setMessage(errorMessage(error, locale, t('error')))
-              }
-            })
-          }}>
-            <h2 className="section-title">{t('sendReminder')}</h2>
-            <p className="text-sm text-muted">{t('advisorReminderHint')}</p>
-            <label className="block text-sm font-semibold">{t('advisorReminderBody')}
-              <textarea className="field w-full" rows={5} maxLength={1000} value={body} onChange={(event) => { setBody(event.target.value); setSent(false) }} disabled={busy} required />
-            </label>
-            {sent && <p className="login-result login-result-success" role="status">{t('advisorReminderSent')}</p>}
-            {message && <p className="login-result" role="alert">{message}</p>}
-            <PendingButton type="submit" className="btn btn-primary" pending={busy} disabled={!body.trim()}>
-              <Send size={16} aria-hidden />{t('sendReminder')}
-            </PendingButton>
-          </form>
-          <section className="card">
-            <h2 className="section-title panel-heading">{t('advisorReminderHistory')}</h2>
-            {!comments.length && <EmptyState>{t('advisorNoReminders')}</EmptyState>}
-            {comments.map((comment) => (
-              <article key={comment.id} className="advisor-item">
-                <p className="text-xs text-muted"><time dateTime={comment.createdAt}>{date(comment.createdAt)}</time>{comment.author && ` · ${nameOf(comment.author)}`}</p>
-                <p className="mt-1 whitespace-pre-wrap break-words text-sm">{comment.body}</p>
-              </article>
-            ))}
-          </section>
-        </div>
+              setReminderOpen(true)
+            }}><Send size={16} aria-hidden />{t('sendReminder')}</button>
+          </header>
+          {sent && <p className="login-result login-result-success mx-4 mb-3" role="status">{t('advisorReminderSent')}</p>}
+          {reminderOpen && <ActionDialog title={t('sendReminder')} description={`${name} · ${student.account}\n${t('advisorReminderHint')}`}
+            busy={busy} onDismiss={dismissReminder} triggerRef={reminderButton}>
+            <form className="space-y-4" onSubmit={(event) => {
+              event.preventDefault()
+              const text = body.trim()
+              if (!text || text.length > 1000) return
+              void run(async () => {
+                setMessage('')
+                setSent(false)
+                if (!await confirm({ title: t('sendReminder'), body: `${name} · ${student.account}\n\n${text}`, confirm: t('sendReminder') })) return
+                try {
+                  await api(`/api/teacher/students/${id}/comments`, { method: 'POST', body: { body: text }, silent: true })
+                  setBody('')
+                  setSent(true)
+                  setReminderOpen(false)
+                  await client.invalidateQueries({ queryKey: ['teacher-student', id] })
+                } catch (error) {
+                  setMessage(errorMessage(error, locale, t('error')))
+                }
+              })
+            }}>
+              <label className="block text-sm font-semibold">{t('advisorReminderBody')}
+                <textarea className="field w-full" rows={5} maxLength={1000} value={body} onChange={(event) => { setBody(event.target.value); setSent(false) }} disabled={busy} required />
+              </label>
+              {message && <p className="login-result" role="alert">{message}</p>}
+              <div className="action-dialog-actions">
+                <button type="button" className="btn btn-ghost" disabled={busy} onClick={dismissReminder}>{t('cancel')}</button>
+                <PendingButton type="submit" className="btn btn-primary" pending={busy} disabled={!body.trim()}>
+                  <Send size={16} aria-hidden />{t('sendReminder')}
+                </PendingButton>
+              </div>
+            </form>
+          </ActionDialog>}
+          {!comments.length && <EmptyState>{t('advisorNoReminders')}</EmptyState>}
+          {comments.map((comment) => (
+            <article key={comment.id} className="advisor-item">
+              <p className="text-xs text-muted"><time dateTime={comment.createdAt}>{date(comment.createdAt)}</time>{comment.author && ` · ${nameOf(comment.author)}`}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm">{comment.body}</p>
+            </article>
+          ))}
+        </section>
       )}
     </div>
   )

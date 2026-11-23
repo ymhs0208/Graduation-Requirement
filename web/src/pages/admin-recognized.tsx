@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Award, BookOpen, Pencil, Plus, Search, SlidersHorizontal, Trophy } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { ActionDialog } from '../components/action-dialog'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
 import { PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
@@ -33,9 +34,8 @@ export function AdminRecognized() {
   const [message, setMessage] = useState('')
   const [notice, setNotice] = useState('')
   const nameField = useRef<HTMLInputElement>(null)
-  const addButton = useRef<HTMLButtonElement>(null)
+  const editorTrigger = useRef<HTMLButtonElement | null>(null)
   useUnsaved(dirty)
-  useEffect(() => { if (editor) nameField.current?.focus() }, [editor])
 
   const items = query.data?.items ?? []
   const term = search.trim().toLowerCase()
@@ -45,7 +45,8 @@ export function AdminRecognized() {
     (item.nameZh.toLowerCase().includes(term) || item.nameEn.toLowerCase().includes(term)),
   )
 
-  function openEditor(item: Item | 'new') {
+  function openEditor(item: Item | 'new', trigger: HTMLButtonElement) {
+    editorTrigger.current = trigger
     setEditor(item)
     setForm(item === 'new'
       ? { ...initial, type: category === 'ALL' ? initial.type : category }
@@ -59,7 +60,12 @@ export function AdminRecognized() {
     setEditor(null)
     setDirty(false)
     setMessage('')
-    requestAnimationFrame(() => addButton.current?.focus())
+  }
+
+  function dismissEditor() {
+    void run(async () => {
+      if (!dirty || await confirm({ title: t('ruleDiscard'), body: t('recognizedDiscard'), confirm: t('ruleDiscard') })) closeEditor()
+    })
   }
 
   function patchForm(next: Partial<typeof initial>) {
@@ -89,9 +95,9 @@ export function AdminRecognized() {
         })}
       </div>
       {notice && <p className="login-result login-result-success" role="status">{notice}</p>}
-      {editor && <section className="card p-4 sm:p-6">
-        <h2 className="section-title">{t(editor === 'new' ? 'addRecognized' : 'recognizedEdit')}</h2>
-        <form className="mt-4 space-y-4" onSubmit={(event) => {
+      {editor && <ActionDialog title={t(editor === 'new' ? 'addRecognized' : 'recognizedEdit')}
+        onDismiss={dismissEditor} busy={busy} initialFocus={nameField} triggerRef={editorTrigger}>
+        <form className="space-y-4" onSubmit={(event) => {
           event.preventDefault()
           void run(async () => {
             setMessage('')
@@ -131,24 +137,22 @@ export function AdminRecognized() {
             </label>
           </fieldset>
           {message && <p className="login-result" role="alert">{message}</p>}
-          <div className="flex flex-wrap gap-2">
+          <div className="action-dialog-actions">
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={dismissEditor}>{t('cancel')}</button>
             <PendingButton type="submit" className="btn btn-primary" pending={busy}>{t(editor === 'new' ? 'addRecognized' : 'recognizedSave')}</PendingButton>
-            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => run(async () => {
-              if (!dirty || await confirm({ title: t('ruleDiscard'), body: t('recognizedDiscard'), confirm: t('ruleDiscard') })) closeEditor()
-            })}>{t('cancel')}</button>
           </div>
         </form>
-      </section>}
+      </ActionDialog>}
       <section className="card">
         <header className="panel-heading">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="section-title">{t('recognizedItems')}</h2>
-            {!editor && <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
               <BatchImportLink kind="recognized" />
-              <button ref={addButton} type="button" className="btn btn-primary" disabled={busy} onClick={() => openEditor('new')}>
+              <button type="button" className="btn btn-primary" disabled={busy} aria-haspopup="dialog" onClick={(event) => openEditor('new', event.currentTarget)}>
                 <Plus size={17} aria-hidden />{t('addRecognized')}
               </button>
-            </div>}
+            </div>
           </div>
           <div className="account-filters">
             <label className="text-sm font-semibold">{t('recognizedSearch')}
@@ -180,10 +184,10 @@ export function AdminRecognized() {
                     <span className={`account-state ${item.active ? 'account-state-active' : ''}`}>{t(item.active ? 'itemActive' : 'accountInactive')}</span>
                   </div>
                   <p className="text-xs font-semibold text-teal">{t(title)}</p>
-                  <h3 className="text-base font-bold">{name}</h3>
+                  <h3 className="item-title">{name}</h3>
                   <p className="text-sm text-muted">{item.minScore == null ? t('recognizedNoScore') : <>{t('recognizedMinimum')} <strong className="text-ink tabular-nums">{item.minScore}</strong></>}</p>
                   <div className="mt-auto flex flex-wrap gap-2 border-t border-line pt-3">
-                    <button type="button" className="btn btn-ghost" disabled={busy || Boolean(editor)} aria-label={`${t('recognizedEdit')} · ${name}`} onClick={() => openEditor(item)}><Pencil size={15} aria-hidden />{t('recognizedEdit')}</button>
+                    <button type="button" className="btn btn-ghost" disabled={busy && !editor} aria-haspopup="dialog" aria-label={`${t('recognizedEdit')} · ${name}`} onClick={(event) => openEditor(item, event.currentTarget)}><Pencil size={15} aria-hidden />{t('recognizedEdit')}</button>
                     <button type="button" className="btn btn-ghost" disabled={busy || Boolean(editor)} aria-label={`${toggleLabel} · ${name}`} onClick={() => run(async () => {
                       if (!await confirm({ title: `${toggleLabel} · ${name}`, body: t(item.active ? 'confirmHideItem' : 'confirmShowItem'), confirm: toggleLabel, danger: item.active })) return
                       try {

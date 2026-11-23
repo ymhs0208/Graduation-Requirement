@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, FileUp, GraduationCap, Presentation, Search, ShieldCheck, UserRoundX, UsersRound } from 'lucide-react'
+import { ArrowLeft, CircleCheck, FileUp, GraduationCap, Presentation, Search, ShieldCheck, UserRoundPlus, UserRoundX, UsersRound } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { ActionDialog } from '../components/action-dialog'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
 import { LoadError, PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
@@ -30,7 +31,8 @@ export function AdminUsers() {
   const { busy, run } = useLock()
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['users'], queryFn: () => api<{ users: User[]; classes?: Class[] }>('/api/admin/users') })
-  const [mode, setMode] = useState<'list' | 'import' | Role>('list')
+  const [mode, setMode] = useState<'list' | 'import'>('list')
+  const [createRole, setCreateRole] = useState<Role | null>(null)
   const [search, setSearch] = useState('')
   const [role, setRole] = useState<Role>('STUDENT')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DEACTIVATED' | 'ANONYMIZED'>('ALL')
@@ -40,11 +42,10 @@ export function AdminUsers() {
   const [message, setMessage] = useState('')
   const [statusError, setStatusError] = useState('')
   const [created, setCreated] = useState<{ account: string; tempPassword?: string } | null>(null)
-  const panelHeading = useRef<HTMLHeadingElement>(null)
+  const createButton = useRef<HTMLButtonElement>(null)
   const directoryHeading = useRef<HTMLHeadingElement>(null)
   const backButton = useRef<HTMLButtonElement>(null)
   const createdMessage = useRef<HTMLDivElement>(null)
-  const createRole = mode === 'list' || mode === 'import' ? null : mode
   const accountType = createRole && accountTypes[createRole]
   const directoryType = accountTypes[role]
   const dirty = Object.values(form).some(Boolean)
@@ -83,18 +84,19 @@ export function AdminUsers() {
     setMode(next)
     requestAnimationFrame(() => {
       if (next === 'list') directoryHeading.current?.focus()
-      else if (next === 'import') backButton.current?.focus()
-      else panelHeading.current?.focus()
+      else backButton.current?.focus()
     })
   }
 
-  async function returnToList() {
-    if (dirty && !await confirm({ title: t('ruleDiscard'), body: t('unsaved'), confirm: t('ruleDiscard'), danger: true })) return
-    setForm(emptyForm)
-    setAttempted(false)
-    setMessage('')
-    setCreated(null)
-    open('list')
+  function dismissCreate() {
+    void run(async () => {
+      if (dirty && !await confirm({ title: t('ruleDiscard'), body: t('unsaved'), confirm: t('ruleDiscard'), danger: true })) return
+      setCreateRole(null)
+      setForm(emptyForm)
+      setAttempted(false)
+      setMessage('')
+      setCreated(null)
+    })
   }
 
   function resetFilters() {
@@ -104,47 +106,50 @@ export function AdminUsers() {
   }
 
   return (
-    <div className="space-y-4">
-      {mode === 'list' && <div className="directory-tabs" role="group" aria-label={t('directoryRoleTabs')}>
-        {accountRoles.map((next) => {
-          const { Icon, tab } = accountTypes[next]
-          return <button key={next} type="button" aria-pressed={role === next} aria-controls="accounts-list" disabled={busy} onClick={() => {
-            if (role === next) return
-            setRole(next)
-            setStatusError('')
-            resetFilters()
-          }}>
-            <Icon size={17} aria-hidden />{t(tab)}
+    <div className="directory-page">
+      {mode === 'list' && <div className="directory-toolbar">
+        <div className="directory-tabs" role="group" aria-label={t('directoryRoleTabs')}>
+          {accountRoles.map((next) => {
+            const { Icon, tab } = accountTypes[next]
+            return <button key={next} type="button" aria-pressed={role === next} aria-controls="accounts-list" disabled={busy} onClick={() => {
+              if (role === next) return
+              setRole(next)
+              setStatusError('')
+              resetFilters()
+            }}>
+              <Icon size={17} aria-hidden />{t(tab)}
+            </button>
+          })}
+        </div>
+        <div className="directory-toolbar-actions">
+          <button type="button" className="btn btn-ghost" onClick={() => open('import')}><FileUp size={17} aria-hidden />{t('importTitle')}</button>
+          {role === 'STUDENT' && <BatchImportLink kind="classes" />}
+          <button ref={createButton} type="button" className="btn btn-primary directory-primary" aria-haspopup="dialog" onClick={() => setCreateRole(role)}>
+            <UserRoundPlus size={17} aria-hidden />{t(directoryType.title)}
           </button>
-        })}
+        </div>
       </div>}
       {mode === 'list' && query.data && !query.isError && (
         <div className="directory-summary">
           {([
-            ['directoryTotal', directory.length, UsersRound],
-            ['directoryActive', activeCount, ShieldCheck],
-            ['directoryInactive', inactiveCount, UserRoundX],
-          ] as const).map(([label, count, Icon]) => (
-            <section key={label} className="card metric-card">
-              <span className="workspace-event-icon"><Icon size={19} aria-hidden /></span>
-              <div><h2 className="text-sm text-muted">{t(label)}</h2><p className="text-2xl font-bold tabular-nums">{count}</p></div>
+            ['directoryTotal', directory.length, UsersRound, 'total'],
+            ['directoryActive', activeCount, CircleCheck, 'active'],
+            ['directoryInactive', inactiveCount, UserRoundX, 'inactive'],
+          ] as const).map(([label, count, Icon, tone]) => (
+            <section key={label} className="card directory-metric" data-tone={tone}>
+              <div><h2 className="metric-title">{t(label)}</h2><p className="directory-metric-value">{count}</p></div>
+              <span className="directory-icon"><Icon size={19} aria-hidden /></span>
             </section>
           ))}
         </div>
       )}
-      <section id="accounts-list" hidden={mode !== 'list'} className="card account-directory" aria-labelledby="role-directory-title">
-        <div className="panel-heading">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <section id="accounts-list" hidden={mode !== 'list'} className="card directory-panel" aria-labelledby="role-directory-title">
+        <header className="directory-panel-heading">
+          <div className="directory-heading-copy">
+            <span className="directory-icon"><directoryType.Icon size={20} aria-hidden /></span>
             <h2 id="role-directory-title" ref={directoryHeading} tabIndex={-1} className="section-title">{t(directoryType.heading)}</h2>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn btn-ghost" onClick={() => open('import')}><FileUp size={17} aria-hidden />{t('importTitle')}</button>
-              {role === 'STUDENT' && <BatchImportLink kind="classes" />}
-              <button type="button" className="btn btn-primary" onClick={() => open(role)}>
-                <directoryType.Icon size={17} aria-hidden />{t(directoryType.title)}
-              </button>
-            </div>
           </div>
-          <div className="account-filters directory-filters">
+          <div className="directory-filters">
             <label className="text-sm font-semibold">
               {t('findAccount')}
               <span className="account-search">
@@ -161,46 +166,54 @@ export function AdminUsers() {
               </select>
             </label>
           </div>
-        </div>
+        </header>
         {statusError && <p role="alert" className="login-result m-4">{statusError}</p>}
         {query.isLoading ? <div className="p-4"><PageSkeleton /></div> : query.isError || !query.data ? (
           <div className="p-4"><LoadError pending={query.isFetching} onRetry={() => void query.refetch()} /></div>
         ) : <>
-          <div className="directory-results">
-            <p className="text-sm text-muted" role="status">{t('directoryResults')} {users.length} / {directory.length}</p>
+          <div className="directory-results directory-match">
+            <p className="text-sm text-muted" role="status">{t('directoryResults')} <strong className="text-pine tabular-nums">{users.length} / {directory.length}</strong></p>
             {(search || statusFilter !== 'ALL') && <button type="button" className="btn btn-ghost" onClick={resetFilters}>{t('directoryClear')}</button>}
           </div>
-          {users.length === 0 ? <EmptyState>{term || statusFilter !== 'ALL' ? t('noMatchingAccounts') : t('empty')}</EmptyState> : (
-          <ul className="directory-list">
-            {visible.map((user) => {
-              const deactivating = user.status === 'ACTIVE'
-              const action = t(deactivating ? 'deactivate' : 'activate')
-              const name = locale === 'en' ? user.nameEn || user.nameZh : user.nameZh
-              return (
-                <li key={user.id} className="directory-row">
-                  <div className="account-row-name">
-                    <span className="workspace-avatar" aria-hidden="true">{Array.from(name || user.account)[0]}</span>
-                    <div className="min-w-0">
-                      <p className="font-bold">{name || user.account}</p>
-                      <p className="text-sm text-muted">{[user.account, role === 'STUDENT' && !user.anonymized ? user.classNameZh : '', role === 'STUDENT' && !user.anonymized && user.cohortYear ? `${user.cohortYear} ${t('cohort')}` : ''].filter(Boolean).join(' · ')}</p>
+          {users.length === 0 ? <div className="directory-empty"><EmptyState>{term || statusFilter !== 'ALL' ? t('noMatchingAccounts') : t('empty')}</EmptyState></div> : <>
+            <div className="directory-columns" aria-hidden="true">
+              <span>{t('directoryIdentity')}</span>
+              <span>{t('recognizedStatus')}</span>
+              <span>{t('directoryActions')}</span>
+            </div>
+            <ul className="directory-list" role="list">
+              {visible.map((user) => {
+                const deactivating = user.status === 'ACTIVE'
+                const action = t(deactivating ? 'deactivate' : 'activate')
+                const name = locale === 'en' ? user.nameEn || user.nameZh : user.nameZh
+                const details = role === 'STUDENT' && !user.anonymized
+                  ? [user.classNameZh, user.cohortYear && `${user.cohortYear} ${t('cohort')}`].filter(Boolean).join(' · ')
+                  : ''
+                return (
+                  <li key={user.id} className="directory-row">
+                    <div className="directory-identity">
+                      <span className="directory-avatar" aria-hidden="true">{Array.from(name || user.account)[0]}</span>
+                      <div className="min-w-0">
+                        <p className="item-title">{name || user.account}</p>
+                        <p className="directory-identity-meta"><span className="directory-id">{user.account}</span>{details && <span>{details}</span>}</p>
+                      </div>
                     </div>
-                  </div>
-                  <span className={`account-state justify-self-start ${deactivating && !user.anonymized ? 'account-state-active' : ''}`}>{t(user.anonymized ? 'accountAnonymized' : deactivating ? 'itemActive' : 'accountInactive')}</span>
-                  {!user.anonymized && <button type="button" className="btn btn-ghost" disabled={busy} aria-label={`${action} ${user.account}`} onClick={() => run(async () => {
-                    if (!await confirm({ title: `${action} · ${user.account}`, body: t(deactivating ? 'confirmDeactivate' : 'confirmReactivate'), confirm: action, danger: deactivating })) return
-                    setStatusError('')
-                    try {
-                      await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: deactivating ? { status: 'DEACTIVATED', deactivationReason: 'SUSPENDED' } : { status: 'ACTIVE' }, success: t('saved'), silent: true })
-                      await client.invalidateQueries({ queryKey: ['users'] })
-                    } catch (error) {
-                      setStatusError(errorMessage(error, locale, t('error')))
-                    }
-                  })}>{action}</button>}
-                </li>
-              )
-            })}
-          </ul>
-          )}
+                    <span className="directory-state" data-state={user.anonymized ? 'anonymized' : deactivating ? 'active' : 'inactive'}>{t(user.anonymized ? 'accountAnonymized' : deactivating ? 'itemActive' : 'accountInactive')}</span>
+                    {!user.anonymized && <button type="button" className="btn btn-ghost directory-row-action" data-danger={deactivating} disabled={busy} aria-label={`${action} ${user.account}`} onClick={() => run(async () => {
+                      if (!await confirm({ title: `${action} · ${user.account}`, body: t(deactivating ? 'confirmDeactivate' : 'confirmReactivate'), confirm: action, danger: deactivating })) return
+                      setStatusError('')
+                      try {
+                        await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: deactivating ? { status: 'DEACTIVATED', deactivationReason: 'SUSPENDED' } : { status: 'ACTIVE' }, success: t('saved'), silent: true })
+                        await client.invalidateQueries({ queryKey: ['users'] })
+                      } catch (error) {
+                        setStatusError(errorMessage(error, locale, t('error')))
+                      }
+                    })}>{action}</button>}
+                  </li>
+                )
+              })}
+            </ul>
+          </>}
           {pageCount > 1 && <footer className="directory-results border-t border-line">
             <p className="text-sm text-muted">{first + 1}–{first + visible.length} / {users.length}</p>
             <div className="flex flex-wrap gap-2">
@@ -210,15 +223,16 @@ export function AdminUsers() {
           </footer>}
         </>}
       </section>
-      {mode !== 'list' && <button ref={backButton} type="button" className="btn btn-ghost" disabled={busy} onClick={() => void returnToList()}><ArrowLeft size={16} aria-hidden />{t('directoryBack')}</button>}
-      {createRole && accountType && <section className="card p-4 sm:p-6" aria-labelledby="accounts-create-title">
-        <h2 id="accounts-create-title" ref={panelHeading} tabIndex={-1} className="section-title">{t(accountType.title)}</h2>
-        <p className="mt-1 text-sm text-muted">{t('createAccountHint')}</p>
-        {created && <div ref={createdMessage} tabIndex={-1} className="inset-panel mt-4" role="status">
-          <p className="font-bold">{t('accountCreated')} {created.account}</p>
-          {created.tempPassword && <><p className="mt-1 text-sm text-muted">{t('temporaryPasswordOnce')}</p><code className="break-all font-bold text-pine">{created.tempPassword}</code></>}
-        </div>}
-        <form className="mt-4 space-y-4" noValidate onSubmit={(event) => {
+      {mode !== 'list' && <button ref={backButton} type="button" className="btn btn-ghost directory-back" disabled={busy} onClick={() => open('list')}><ArrowLeft size={16} aria-hidden />{t('directoryBack')}</button>}
+      {createRole && accountType && <ActionDialog title={t(accountType.title)} description={t('createAccountHint')}
+        onDismiss={dismissCreate} busy={busy} triggerRef={createButton}>
+        {created ? <div className="space-y-4">
+          <div ref={createdMessage} tabIndex={-1} className="inset-panel" role="status">
+            <p className="font-bold">{t('accountCreated')} {created.account}</p>
+            {created.tempPassword && <><p className="mt-1 text-sm text-muted">{t('temporaryPasswordOnce')}</p><code className="break-all font-bold text-pine">{created.tempPassword}</code></>}
+          </div>
+          <div className="action-dialog-actions"><button className="btn btn-primary" type="button" disabled={busy} onClick={dismissCreate}>{t('dialogClose')}</button></div>
+        </div> : <form className="space-y-4" noValidate onSubmit={(event) => {
           event.preventDefault()
           setAttempted(true)
           setMessage('')
@@ -247,8 +261,7 @@ export function AdminUsers() {
             }
           })
         }}>
-          <fieldset className="space-y-4" disabled={busy}>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <fieldset className="grid gap-4 sm:grid-cols-2" disabled={busy}>
             {fields.map(([key, label, placeholder, maxLength]) => {
               const error = attempted && errors[key]
               return (
@@ -268,13 +281,15 @@ export function AdminUsers() {
                 {classes.map((item) => <option key={item.id} value={item.id}>{locale === 'en' ? item.nameEn || item.nameZh : item.nameZh}</option>)}
               </select>
             </label>}
-          </div>
           </fieldset>
           {message && <p className="login-result" role="alert">{message}</p>}
-          <PendingButton type="submit" className="btn btn-primary" pending={busy}>{t(accountType.title)}</PendingButton>
-        </form>
-      </section>}
-      <div id="accounts-import" hidden={mode !== 'import'}><ImportPanel /></div>
+          <div className="action-dialog-actions">
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={dismissCreate}>{t('cancel')}</button>
+            <PendingButton type="submit" className="btn btn-primary" pending={busy}>{t(accountType.title)}</PendingButton>
+          </div>
+        </form>}
+      </ActionDialog>}
+      <div id="accounts-import" className="directory-import" hidden={mode !== 'import'}><ImportPanel /></div>
     </div>
   )
 }

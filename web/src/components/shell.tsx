@@ -94,7 +94,7 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
   const PageIcon = navIcons[page]
   const home = links[user.role][0][0]
   return (
-    <div className="workspace-shell flex min-h-screen flex-col">
+    <div className="workspace-shell flex min-h-screen flex-col" data-role={user.role}>
       <SkipLink />
       <header className="workspace-header">
         <div className="workspace-header-inner">
@@ -185,13 +185,13 @@ export function Shell({ user, onLocale, children }: { user: SessionUser; onLocal
         </div>
         <div className="workspace-body">
           <main id="main" ref={main} tabIndex={-1} className="workspace-main outline-none">
-            <div className="workspace-heading">
-              <span className="workspace-symbol"><PageIcon size={22} aria-hidden /></span>
-              <div>
+            <header className="workspace-heading">
+              <span className="workspace-symbol"><PageIcon size={26} aria-hidden /></span>
+              <div className="workspace-heading-copy">
                 <h1>{t(studentDetail ? 'studentDetail' : page)}</h1>
                 <p className="workspace-guide">{t(studentDetail ? 'studentDetailGuide' : `${page}Guide`)}</p>
               </div>
-            </div>
+            </header>
             {children}
           </main>
         </div>

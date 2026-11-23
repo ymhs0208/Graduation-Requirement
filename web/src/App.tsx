@@ -29,6 +29,7 @@ import { EvidencePage } from './pages/student-evidence'
 import { TeacherHome } from './pages/teacher'
 import { TeacherStudent } from './pages/teacher-student'
 import { AdminPasskeys } from './pages/admin-passkeys'
+import { Globe2, KeyRound, LogIn, ShieldCheck } from 'lucide-react'
 
 const client = new QueryClient()
 
@@ -79,13 +80,19 @@ function LoginPage() {
       <SkipLink />
       <div className="login-layout">
         <header className="login-header">
-          <div className="login-brand">
-            <p>{t('university')}</p>
-            <p>{t('program')}</p>
+          <div className="login-header-inner">
+            <div className="login-brand">
+              <img src="/brand/university-seal.jpg" alt="" width="48" height="48" />
+              <div>
+                <p>{t('university')}</p>
+                <p>{t('program')}</p>
+              </div>
+            </div>
+            <button className="login-language" type="button" onClick={() => setLocale(locale === 'en' ? 'zh-Hant' : 'en')}>
+              <Globe2 size={17} aria-hidden />
+              {t('language')}
+            </button>
           </div>
-          <button className="btn btn-ghost login-language" type="button" onClick={() => setLocale(locale === 'en' ? 'zh-Hant' : 'en')}>
-            {t('language')}
-          </button>
         </header>
         <main id="main" tabIndex={-1} className="login-main outline-none">
           <div className="login-hero">
@@ -124,10 +131,13 @@ function LoginPage() {
                   }
                 }}
               >
-                <div className="login-intro">
-                  <h1>{t('loginVerification')}</h1>
-                  <p>{verification.account}</p>
-                </div>
+                <header className="login-intro">
+                  <span className="login-heading-icon"><ShieldCheck size={24} aria-hidden /></span>
+                  <div>
+                    <h1>{t('loginVerification')}</h1>
+                    <p>{verification.account}</p>
+                  </div>
+                </header>
                 {verification.canUsePasskey && (
                   <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('verificationMethod')}>
                     {(['totp', 'passkey'] as const).map((method) => (
@@ -200,10 +210,15 @@ function LoginPage() {
                   }
                 })}
               >
-                <div className="login-intro">
-                  <h1>{forgot ? t('forgot') : t('loginHeading')}</h1>
-                  <p>{forgot ? t('recoveryIntro') : t('loginIntro')}</p>
-                </div>
+                <header className="login-intro">
+                  <span className="login-heading-icon">
+                    {forgot ? <KeyRound size={24} aria-hidden /> : <LogIn size={24} aria-hidden />}
+                  </span>
+                  <div>
+                    <h1>{forgot ? t('forgot') : t('loginHeading')}</h1>
+                    <p>{forgot ? t('recoveryIntro') : t('loginIntro')}</p>
+                  </div>
+                </header>
                 {!forgot && reason && <p className="inset-panel text-sm" role="status">{t(reason === 'expired' ? 'sessionExpired' : 'signInRequired')}</p>}
                 <div className="login-control">
                   <label htmlFor="login-account">{t('account')}</label>
@@ -371,9 +386,11 @@ function AccountFrame({ title, description, children }: { title: string; descrip
       <main id="main" tabIndex={-1} className="account-main outline-none">
         <section className="card account-card">
           <header className="account-heading">
-            <img src="/brand/program-mark.png" alt="" width="36" height="36" />
-            <p>{t('university')}</p>
-            <h1>{title}</h1>
+            <img src="/brand/university-seal.jpg" alt="" width="52" height="52" />
+            <div>
+              <p>{t('university')}</p>
+              <h1>{title}</h1>
+            </div>
           </header>
           <div className="account-content">
             {description && <p className="mb-4 text-sm text-muted">{description}</p>}

@@ -106,7 +106,7 @@ export function TeacherHome() {
                 <div className="roster-person">
                   <span className="workspace-avatar" aria-hidden="true">{Array.from(name)[0]}</span>
                   <div className="min-w-0">
-                    <h3 className="font-bold">{name}</h3>
+                    <h3 className="item-title">{name}</h3>
                     <p className="text-sm text-muted">{[student.account, group].filter(Boolean).join(' · ')}</p>
                   </div>
                 </div>

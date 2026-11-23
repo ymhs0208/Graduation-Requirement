@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { CalendarDays, Clock, Pencil, ShieldAlert, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { ActionDialog } from '../components/action-dialog'
 import { useConfirm, useLock, useUnsaved } from '../components/confirm'
 import { LoadError, PageSkeleton, PendingButton } from '../components/feedback'
 import { EmptyState } from '../components/shell'
@@ -24,7 +25,6 @@ export function AdminRetention() {
   const editing = draft !== null
   const changed = editing && draft !== String(query.data?.retentionYears)
   useUnsaved(changed)
-  useEffect(() => { if (editing) yearsInput.current?.focus() }, [editing])
 
   const saved = query.data
   if (!saved && query.isLoading) return <PageSkeleton />
@@ -45,20 +45,27 @@ export function AdminRetention() {
 
   function closeEditor() {
     setDraft(null)
-    requestAnimationFrame(() => editButton.current?.focus())
+  }
+
+  function dismissEditor() {
+    void run(async () => {
+      if (changed && !await confirm({ title: t('ruleDiscard'), body: t('ruleDiscardConfirm'), confirm: t('ruleDiscard') })) return
+      setMessage(null)
+      closeEditor()
+    })
   }
 
   return (
     <div className="space-y-4">
-      {feedback}
+      {!editing && feedback}
       <div className="retention-overview">
         <section className="card metric-card">
           <span className="workspace-event-icon"><Clock size={20} aria-hidden /></span>
-          <div><h2 className="text-sm text-muted">{t('retentionCurrent')}</h2><p className="text-2xl font-bold tabular-nums">{retentionYears} <span className="text-sm font-medium">{t('retentionYearUnit')}</span></p></div>
+          <div><h2 className="metric-title">{t('retentionCurrent')}</h2><p className="text-2xl font-bold tabular-nums">{retentionYears} <span className="text-sm font-medium">{t('retentionYearUnit')}</span></p></div>
         </section>
         <section className="card metric-card">
           <span className="workspace-event-icon"><CalendarDays size={20} aria-hidden /></span>
-          <div><h2 className="text-sm text-muted">{t('retentionCutoffLabel')}</h2><p className="font-bold"><time dateTime={preview.cutoff}>{formatDate(preview.cutoff)}</time></p></div>
+          <div><h2 className="metric-title">{t('retentionCutoffLabel')}</h2><p className="font-bold"><time dateTime={preview.cutoff}>{formatDate(preview.cutoff)}</time></p></div>
         </section>
       </div>
       <div className="retention-layout">
@@ -68,41 +75,48 @@ export function AdminRetention() {
             <p className="mt-1 text-sm text-muted">{t('retentionSettingHint')}</p>
           </div>
           <div className="p-4 sm:p-5">
-            {editing ? (
-              <form className="space-y-4" noValidate onSubmit={(event) => {
-                event.preventDefault()
-                if (!valid || !changed) return
-                void run(async () => {
-                  setMessage(null)
-                  if (!await confirm({
-                    title: t('saveRetention'),
-                    body: `${retentionYears} → ${years} ${t('retentionYearUnit')}\n\n${t('retentionSaveConfirm')}`,
-                    confirm: t('saveRetention'),
-                  })) return
-                  setOperation('save')
-                  try {
-                    await api('/api/admin/retention', { method: 'PUT', body: { retentionYears: years }, silent: true })
-                    closeEditor()
-                    setMessage({ text: t('retentionSaved'), error: false })
-                    await query.refetch()
-                  } catch (error) {
-                    setMessage({ text: errorMessage(error, locale, t('error')), error: true })
-                  } finally {
-                    setOperation(null)
-                  }
-                })
-              }}>
-                <label className="block text-sm font-semibold">{t('retentionYearsLabel')}
-                  <input ref={yearsInput} className="field block w-28" type="number" min="1" max="30" step="1" inputMode="numeric"
-                    value={draft} onChange={(event) => setDraft(event.target.value)} disabled={busy} />
-                </label>
-                {!valid && <p className="login-error">{t('retentionInvalidYears')}</p>}
-                <div className="flex flex-wrap gap-2">
-                  <PendingButton type="submit" className="btn btn-primary" disabled={!valid || !changed || busy} pending={operation === 'save'}>{t('saveRetention')}</PendingButton>
-                  <button type="button" className="btn btn-ghost" disabled={busy} onClick={closeEditor}>{t('cancel')}</button>
-                </div>
-              </form>
-            ) : <button ref={editButton} type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setMessage(null); setDraft(String(retentionYears)) }}><Pencil size={16} aria-hidden />{t('retentionEdit')}</button>}
+            <button ref={editButton} type="button" className="btn btn-ghost" disabled={busy && !editing} aria-haspopup="dialog" onClick={() => { setMessage(null); setDraft(String(retentionYears)) }}>
+              <Pencil size={16} aria-hidden />{t('retentionEdit')}
+            </button>
+            {editing && (
+              <ActionDialog title={t('retentionEdit')} description={t('retentionSettingHint')} onDismiss={dismissEditor}
+                busy={busy} compact initialFocus={yearsInput} triggerRef={editButton}>
+                <form className="space-y-4" noValidate onSubmit={(event) => {
+                  event.preventDefault()
+                  if (!valid || !changed) return
+                  void run(async () => {
+                    setMessage(null)
+                    if (!await confirm({
+                      title: t('saveRetention'),
+                      body: `${retentionYears} → ${years} ${t('retentionYearUnit')}\n\n${t('retentionSaveConfirm')}`,
+                      confirm: t('saveRetention'),
+                    })) return
+                    setOperation('save')
+                    try {
+                      await api('/api/admin/retention', { method: 'PUT', body: { retentionYears: years }, silent: true })
+                      setMessage({ text: t('retentionSaved'), error: false })
+                      await query.refetch()
+                      closeEditor()
+                    } catch (error) {
+                      setMessage({ text: errorMessage(error, locale, t('error')), error: true })
+                    } finally {
+                      setOperation(null)
+                    }
+                  })
+                }}>
+                  <label className="block text-sm font-semibold">{t('retentionYearsLabel')}
+                    <input ref={yearsInput} className="field block w-28" type="number" min="1" max="30" step="1" inputMode="numeric"
+                      value={draft} onChange={(event) => setDraft(event.target.value)} disabled={busy} />
+                  </label>
+                  {!valid && <p className="login-error">{t('retentionInvalidYears')}</p>}
+                  {feedback}
+                  <div className="action-dialog-actions">
+                    <button type="button" className="btn btn-ghost" disabled={busy} onClick={dismissEditor}>{t('cancel')}</button>
+                    <PendingButton type="submit" className="btn btn-primary" disabled={!valid || !changed || busy} pending={operation === 'save'}>{t('saveRetention')}</PendingButton>
+                  </div>
+                </form>
+              </ActionDialog>
+            )}
           </div>
         </section>
         <section className="card min-w-0">
@@ -130,7 +144,6 @@ export function AdminRetention() {
               <ShieldAlert size={19} className="mt-0.5 shrink-0 text-[#9e1d22]" aria-hidden />
               <p className="text-sm text-muted">{t('retentionCleanupHint')}</p>
             </div>
-            {editing && <p className="text-sm text-muted">{t('retentionCloseEditor')}</p>}
             <PendingButton className="btn btn-miss" type="button" pending={operation === 'purge'} disabled={busy || editing || query.isError}
               onClick={() => run(async () => {
                 setMessage(null)

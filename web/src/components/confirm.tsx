@@ -1,76 +1,46 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '../lib/i18n'
+import { ActionDialog } from './action-dialog'
 
-type Ask = { title: string; body: string; confirm: string; danger?: boolean; resolve: (value: boolean) => void }
+type ConfirmOptions = { title: string; body: string; confirm: string; danger?: boolean }
+type Ask = ConfirmOptions & { trigger: HTMLElement | null; resolve: (value: boolean) => void }
 
-const ConfirmContext = createContext<(options: Omit<Ask, 'resolve'>) => Promise<boolean>>(async () => false)
+const ConfirmContext = createContext<(options: ConfirmOptions) => Promise<boolean>>(async () => false)
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n()
   const [ask, setAsk] = useState<Ask | null>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
-  const returnFocus = useRef<HTMLElement | null>(null)
-  const confirm = (options: Omit<Ask, 'resolve'>) => new Promise<boolean>((resolve) => setAsk({ ...options, resolve }))
-  const close = (accepted: boolean) => {
-    ask?.resolve(accepted)
-    setAsk(null)
+  const current = useRef<Ask | null>(null)
+  const cancelButton = useRef<HTMLButtonElement>(null)
+
+  function confirm(options: ConfirmOptions) {
+    if (current.current) return Promise.resolve(false)
+    return new Promise<boolean>((resolve) => {
+      const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      const request = { ...options, trigger, resolve }
+      current.current = request
+      setAsk(request)
+    })
   }
-  useEffect(() => {
-    if (!ask) return
-    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const panel = panelRef.current
-    const focusable = () => [...(panel?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? [])]
-    focusable()[0]?.focus()
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        close(false)
-        return
-      }
-      if (event.key !== 'Tab') return
-      const items = focusable()
-      if (!items.length) return
-      const first = items[0]
-      const last = items[items.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      returnFocus.current?.focus()
-    }
-  }, [ask])
+
+  function close(accepted: boolean) {
+    const request = current.current
+    current.current = null
+    setAsk(null)
+    request?.resolve(accepted)
+  }
+
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
       {ask && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-pine/40 p-4" role="presentation">
-          <div
-            ref={panelRef}
-            className="card w-full max-w-md space-y-3 p-5"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="confirm-title"
-            aria-describedby="confirm-body"
-          >
-            <h2 id="confirm-title" className="text-lg font-bold">{ask.title}</h2>
-            <p id="confirm-body" className="max-h-[55svh] overflow-auto whitespace-pre-line text-sm leading-6">{ask.body}</p>
-            <div className="flex justify-end gap-2">
-              <button className="btn btn-ghost" type="button" onClick={() => close(false)}>
-                {t('cancel')}
-              </button>
-              <button className={`btn ${ask.danger ? 'btn-miss' : 'btn-primary'}`} type="button" onClick={() => close(true)}>
-                {ask.confirm}
-              </button>
-            </div>
+        <ActionDialog title={ask.title} description={ask.body} onDismiss={() => close(false)} initialFocus={cancelButton}
+          trigger={ask.trigger} compact showClose={false}>
+          <div className="action-dialog-actions">
+            <button ref={cancelButton} className="btn btn-ghost" type="button" onClick={() => close(false)}>{t('cancel')}</button>
+            <button className={`btn ${ask.danger ? 'btn-miss' : 'btn-primary'}`} type="button" onClick={() => close(true)}>{ask.confirm}</button>
           </div>
-        </div>
+        </ActionDialog>
       )}
     </ConfirmContext.Provider>
   )

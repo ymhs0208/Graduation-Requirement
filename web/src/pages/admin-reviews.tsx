@@ -230,7 +230,7 @@ export function AdminReviews() {
               {submission.note && <div className="review-note"><h3>{t('note')}</h3><p>{submission.note}</p></div>}
               {submission.teacherComment && <div className="review-note"><h3>{t('reviewTeacherNote')}</h3><p>{submission.teacherComment}</p></div>}
               {submission.authenticity && <div className="review-note" role="status">
-                <h3 className="flex items-center gap-2"><ShieldCheck size={16} aria-hidden />{t('verifyAgainstSource')}</h3>
+                <h3 className="item-title flex items-center gap-2"><ShieldCheck size={16} aria-hidden />{t('verifyAgainstSource')}</h3>
                 <ul className="mt-2 space-y-1 text-sm">
                   {submission.authenticity.certificateNumber && <li>{t('evidenceCertNumber')}：{submission.authenticity.certificateNumber}</li>}
                   {submission.authenticity.issuingBody && <li>{t('evidenceIssuer')}：{submission.authenticity.issuingBody}</li>}

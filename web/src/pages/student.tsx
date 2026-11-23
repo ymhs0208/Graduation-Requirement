@@ -94,13 +94,13 @@ export function StudentHome() {
           <header className="student-profile-main">
             <span className="student-profile-icon" aria-hidden="true">{Array.from(name)[0]}</span>
             <div className="min-w-0">
-              <h2 className="text-3xl font-bold tracking-tight">{name}</h2>
+              <h2 className="profile-title">{name}</h2>
               <p className="mt-1 text-sm text-muted">{[profile.account, className, profile.cohortYear ? `${profile.cohortYear} ${t('cohort')}` : ''].filter(Boolean).join(' · ')}</p>
             </div>
           </header>
           {(showVerdict || progress.delayed) && <section className="student-profile-status" aria-labelledby="graduation-status">
             <div className={showVerdict ? 'student-status-primary' : 'px-1'}>
-              <h3 id="graduation-status" className="text-sm font-semibold text-muted">{t('overviewGraduationStatus')}</h3>
+              <h3 id="graduation-status" className="metric-title">{t('overviewGraduationStatus')}</h3>
               {showVerdict && <StatusPill state={progress.verdict} prominent />}
             </div>
             {progress.delayed && (
@@ -147,7 +147,7 @@ export function StudentHome() {
               return (
                 <li key={category.code} className="credit-category">
                   <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                    <h3 className="font-bold">{name}</h3>
+                    <h3 className="item-title">{name}</h3>
                     <StatusPill state={category.met ? 'passed' : 'missing'} />
                   </div>
                   <dl className="credit-category-metrics">

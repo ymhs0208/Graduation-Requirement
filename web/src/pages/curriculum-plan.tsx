@@ -59,7 +59,7 @@ export function CurriculumPlan({ courses, cohort, minimums }: {
         <div className="curriculum-banner-heading">
           <GraduationCap size={27} aria-hidden />
           <div>
-            <h2 className="text-xl font-bold sm:text-2xl">{heading}</h2>
+            <h2 className="profile-title curriculum-title">{heading}</h2>
             <p className="mt-1 text-sm text-slate-200">{t('program')}</p>
           </div>
         </div>
@@ -145,7 +145,7 @@ export function CurriculumPlan({ courses, cohort, minimums }: {
             {visible.map((course) => (
               <li key={course.number}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div><p className="text-xs font-semibold text-muted">#{course.number} · {termLabel(course)}</p><h3 className="font-bold">{title(course)}</h3></div>
+                  <div><p className="text-xs font-semibold text-muted">#{course.number} · {termLabel(course)}</p><h3 className="item-title">{title(course)}</h3></div>
                   <span className={`curriculum-kind ${course.requirementType === 'MAJOR_REQUIRED' ? 'curriculum-kind-required' : ''}`}>{t(course.requirementType === 'MAJOR_REQUIRED' ? 'curriculumRequired' : 'curriculumElective')}</span>
                 </div>
                 <p className="text-sm text-muted">{categoryLabel(course)}{noteOf(course) ? ` · ${noteOf(course)}` : ''}</p>

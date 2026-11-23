@@ -52,7 +52,7 @@ export function HelpPage({ role }: { role: SessionUser['role'] }) {
     <div className="space-y-4">
       {questions.map(([question, answer], index) => (
         <details key={question} className="card faq-item" open={index === 0 ? true : undefined}>
-          <summary>{question}<ChevronDown size={18} aria-hidden /></summary>
+          <summary className="section-title">{question}<ChevronDown size={18} aria-hidden /></summary>
           <p className="mt-2 text-sm leading-7 text-ink">{answer}</p>
         </details>
       ))}

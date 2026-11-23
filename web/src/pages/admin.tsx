@@ -1,6 +1,6 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Award, CalendarClock, GraduationCap, TriangleAlert } from 'lucide-react'
+import { Award, CalendarClock, CalendarDays, ClipboardCheck, Download, GraduationCap, TriangleAlert, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfirm, useLock } from '../components/confirm'
 import { EmptyState, StatusPill } from '../components/shell'
@@ -8,13 +8,21 @@ import { api, downloadCsv, errorMessage } from '../lib/api'
 import { LoadError, PageSkeleton, PendingLabel, StepStatus } from '../components/feedback'
 import { useI18n } from '../lib/i18n'
 
+type StatsResponse = {
+  cohortYear?: number
+  cohorts: number[]
+  stats: { englishPassRate: number; certificationRate: number; atRisk: number; delayed: number } | null
+  students: { account: string; nameZh: string; nameEn: string; classNameZh: string; verdict: string; english: string }[]
+}
+
 export function AdminStats() {
   const { t, locale } = useI18n()
   const confirm = useConfirm()
   const [cohort, setCohort] = useState<number | ''>('')
   const query = useQuery({
     queryKey: ['stats', cohort],
-    queryFn: () => api<{ cohortYear: number; cohorts: number[]; stats: { students: number; englishPassRate: number; certificationRate: number; atRisk: number; delayed: number; ready: number; blocked: number; needsOffice: number } | null; students: { account: string; nameZh: string; nameEn: string; verdict: string; atRisk: boolean; english: string }[] }>(`/api/admin/stats${cohort ? `?cohort=${cohort}` : ''}`),
+    queryFn: () => api<StatsResponse>(`/api/admin/stats${cohort ? `?cohort=${cohort}` : ''}`),
+    placeholderData: keepPreviousData,
   })
   const client = useQueryClient()
   const { busy, run } = useLock()
@@ -23,123 +31,171 @@ export function AdminStats() {
   const [message, setMessage] = useState('')
   if (query.isLoading) return <PageSkeleton />
   if (query.isError || !query.data) return <LoadError pending={query.isFetching} onRetry={() => void query.refetch()} />
-  const stats = query.data.stats
+  const { stats, students, cohortYear, cohorts } = query.data
+  const actionsDisabled = busy || query.isPlaceholderData || !cohortYear
   return (
-    <div className="space-y-5">
-      <div className="workspace-toolbar">
-        <label className="text-sm font-medium">
-          {t('cohort')}
-          <select className="field ml-2 mt-0 w-auto" value={query.data.cohortYear} onChange={(event) => setCohort(Number(event.target.value))}>
-            {query.data.cohorts.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="btn btn-ghost"
-          type="button"
-          disabled={busy}
-          onClick={() => run(async () => {
-            setMessage('')
-            setJob('export')
-            setStep(0)
-            try {
-              await downloadCsv(`/api/admin/export?cohort=${query.data?.cohortYear}`, `graduation-${query.data?.cohortYear}.csv`)
-              setStep(2)
-              toast.success(t('exportDone'))
-            } catch (error) {
-              setMessage(errorMessage(error, locale, t('exportFailed')))
-              setStep(-1)
-            } finally {
-              window.setTimeout(() => { setJob(''); setStep(-1) }, 900)
-            }
-          })}
-        >
-          <PendingLabel pending={busy && job === 'export'}>{t('export')}</PendingLabel>
-        </button>
-        <button
-          className="btn btn-primary"
-          type="button"
-          disabled={busy}
-          onClick={() => run(async () => {
-            if (!await confirm({ title: t('preaudit'), body: t('preauditConfirm'), confirm: t('preaudit') })) return
-            setMessage('')
-            setJob('preaudit')
-            setStep(0)
-            try {
-              await api('/api/admin/preaudit', { method: 'POST', body: { cohortYear: query.data?.cohortYear }, success: t('preauditDone'), timeout: 60000, silent: true })
-              setStep(1)
-              await client.invalidateQueries({ queryKey: ['notes'] })
-              setStep(2)
-            } catch (error) {
-              setMessage(errorMessage(error, locale, t('error')))
-              setStep(-1)
-            } finally {
-              window.setTimeout(() => { setJob(''); setStep(-1) }, 900)
-            }
-          })}
-        >
-          <PendingLabel pending={busy && job === 'preaudit'}>{t('preaudit')}</PendingLabel>
-        </button>
+    <div className="stats-page">
+      <div className="card stats-toolbar">
+        <div className="stats-cohort">
+          <span className="stats-icon"><CalendarDays size={20} aria-hidden /></span>
+          <label className="stats-cohort-field">
+            <span>{t('cohort')}</span>
+            <select className="field" value={cohort || cohortYear || ''} disabled={busy || !cohorts.length} onChange={(event) => setCohort(Number(event.target.value))}>
+              {!cohorts.length && <option value="">—</option>}
+              {cohorts.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="stats-toolbar-actions">
+          <button
+            className="btn btn-ghost"
+            type="button"
+            disabled={actionsDisabled}
+            onClick={() => run(async () => {
+              setMessage('')
+              setJob('export')
+              setStep(0)
+              try {
+                await downloadCsv(`/api/admin/export?cohort=${cohortYear}`, `graduation-${cohortYear}.csv`)
+                setStep(2)
+                toast.success(t('exportDone'))
+              } catch (error) {
+                setMessage(errorMessage(error, locale, t('exportFailed')))
+                setStep(-1)
+              } finally {
+                window.setTimeout(() => { setJob(''); setStep(-1) }, 900)
+              }
+            })}
+          >
+            <PendingLabel pending={busy && job === 'export'}><Download size={16} aria-hidden />{t('export')}</PendingLabel>
+          </button>
+          <button
+            className="btn btn-primary stats-primary"
+            type="button"
+            disabled={actionsDisabled}
+            onClick={() => run(async () => {
+              if (!await confirm({ title: t('preaudit'), body: t('preauditConfirm'), confirm: t('preaudit') })) return
+              setMessage('')
+              setJob('preaudit')
+              setStep(0)
+              try {
+                await api('/api/admin/preaudit', { method: 'POST', body: { cohortYear }, success: t('preauditDone'), timeout: 60000, silent: true })
+                setStep(1)
+                await client.invalidateQueries({ queryKey: ['notes'] })
+                setStep(2)
+              } catch (error) {
+                setMessage(errorMessage(error, locale, t('error')))
+                setStep(-1)
+              } finally {
+                window.setTimeout(() => { setJob(''); setStep(-1) }, 900)
+              }
+            })}
+          >
+            <PendingLabel pending={busy && job === 'preaudit'}><ClipboardCheck size={16} aria-hidden />{t('preaudit')}</PendingLabel>
+          </button>
+        </div>
       </div>
       {message && <p role="alert" className="login-result">{message}</p>}
       {job === 'export' && step >= 0 && <StepStatus steps={[t('stepExport'), t('stepDownload'), t('stepDone')]} current={step} />}
       {job === 'preaudit' && step >= 0 && <StepStatus steps={[t('stepScan'), t('stepNotify'), t('stepDone')]} current={step} />}
-      {stats && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {([
-            [t('englishRate'), `${Math.round(stats.englishPassRate * 100)}%`, GraduationCap],
-            [t('certRate'), `${Math.round(stats.certificationRate * 100)}%`, Award],
-            [t('atRisk'), String(stats.atRisk), TriangleAlert],
-            [t('delayed'), String(stats.delayed), CalendarClock],
-          ] as const).map(([label, value, Icon]) => (
-            <article key={label} className="card metric-card">
-              <span className="workspace-event-icon"><Icon size={20} aria-hidden /></span>
-              <div>
-                <p className="text-sm text-muted">{label}</p>
-                <p className="mt-1 text-3xl font-bold tracking-tight">{value}</p>
+      {query.isPlaceholderData ? <PageSkeleton /> : <>
+        {stats && (
+          <div className="stats-summary">
+            <section className="card stats-metric-panel" aria-labelledby="stats-rates-title">
+              <header className="stats-panel-heading">
+                <h2 className="section-title" id="stats-rates-title">{t('statsRequirementRates')}</h2>
+                <p className="text-sm text-muted">{t('statsActiveOnly')}</p>
+              </header>
+              <div className="stats-rate-list">
+                {([
+                  ['englishRate', stats.englishPassRate, GraduationCap, 'english'],
+                  ['certRate', stats.certificationRate, Award, 'certification'],
+                ] as const).map(([label, rate, Icon, tone]) => {
+                  const percent = Math.round(rate * 100)
+                  return (
+                    <div key={label} className="stats-rate" data-tone={tone}>
+                      <span className="stats-icon"><Icon size={19} aria-hidden /></span>
+                      <div className="stats-rate-copy">
+                        <div className="stats-rate-label">
+                          <h3 className="metric-title">{t(label)}</h3>
+                          <p className="stats-value">{percent}%</p>
+                        </div>
+                        <progress className="stats-rate-bar" value={percent} max={100} aria-hidden />
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            </article>
-          ))}
-        </div>
-      )}
-      <section className="card">
-        <header className="panel-heading flex items-center justify-between gap-2">
-          <h2 className="section-title">{t('studentList')}</h2>
-          <span className="tag tabular-nums">{query.data.students.length}</span>
-        </header>
-        {query.data.students.length === 0 ? <EmptyState>{t('empty')}</EmptyState> : (
-        <div className="table-panel">
-        <table className="data-table">
-          <caption className="sr-only">{t('stats')}</caption>
-          <thead>
-            <tr>
-              <th scope="col">{t('account')}</th>
-              <th scope="col">{locale === 'en' ? 'Name' : '姓名'}</th>
-              <th scope="col">{t('overview')}</th>
-              <th scope="col">{t('englishRate')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {query.data.students.map((student) => (
-              <tr key={student.account}>
-                <td className="font-medium">{student.account}</td>
-                <td>{locale === 'en' ? student.nameEn : student.nameZh}</td>
-                <td>
-                  <StatusPill state={student.verdict} />
-                </td>
-                <td>
-                  <StatusPill state={student.english} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
+            </section>
+            <section className="card stats-metric-panel" aria-labelledby="stats-tracking-title">
+              <header className="stats-panel-heading">
+                <h2 className="section-title" id="stats-tracking-title">{t('statsProgressTracking')}</h2>
+              </header>
+              <div className="stats-counts">
+                {([
+                  ['atRisk', stats.atRisk, TriangleAlert, 'risk'],
+                  ['delayed', stats.delayed, CalendarClock, 'delayed'],
+                ] as const).map(([label, count, Icon, tone]) => (
+                  <div key={label} className="stats-count" data-tone={tone}>
+                    <span className="stats-icon"><Icon size={19} aria-hidden /></span>
+                    <h3 className="metric-title">{t(label)}</h3>
+                    <p className="stats-value">{count.toLocaleString(locale)}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
         )}
-      </section>
+        <section className="card stats-roster" aria-labelledby="stats-roster-title">
+          <header className="panel-heading stats-roster-heading">
+            <span className="stats-icon"><UsersRound size={20} aria-hidden /></span>
+            <h2 className="section-title" id="stats-roster-title">{t('studentList')}</h2>
+            <span className="stats-roster-count">{students.length.toLocaleString(locale)} {t(students.length === 1 ? 'statsStudentUnitOne' : 'statsStudentUnit')}</span>
+          </header>
+          {!students.length ? <div className="stats-empty"><EmptyState>{t('empty')}</EmptyState></div> : (
+            <table className="stats-table" role="table" aria-labelledby="stats-roster-title">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th scope="col" role="columnheader">{t('directoryIdentity')}</th>
+                  <th scope="col" role="columnheader">{t('overviewGraduationStatus')}</th>
+                  <th scope="col" role="columnheader">{t('statsEnglishStatus')}</th>
+                </tr>
+              </thead>
+              <tbody role="rowgroup">
+                {students.map((student) => {
+                  const name = (locale === 'en' ? student.nameEn || student.nameZh : student.nameZh) || student.account
+                  return (
+                    <tr key={student.account} role="row">
+                      <th scope="row" role="rowheader" className="stats-identity-cell">
+                        <div className="stats-identity">
+                          <span className="stats-avatar" aria-hidden>{Array.from(name)[0]}</span>
+                          <div>
+                            <p className="item-title">{name}</p>
+                            <p className="stats-identity-meta">
+                              <span className="stats-id">{student.account}</span>
+                              {student.classNameZh && <span>{student.classNameZh}</span>}
+                            </p>
+                          </div>
+                        </div>
+                      </th>
+                      <td role="cell">
+                        <span className="stats-mobile-label" aria-hidden>{t('overviewGraduationStatus')}</span>
+                        <StatusPill state={student.verdict} />
+                      </td>
+                      <td role="cell">
+                        <span className="stats-mobile-label" aria-hidden>{t('statsEnglishStatus')}</span>
+                        <StatusPill state={student.english} />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </>}
     </div>
   )
 }
